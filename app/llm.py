@@ -2,6 +2,7 @@ import logging
 from dataclasses import asdict
 from enum import Enum
 from json import JSONDecodeError, dumps
+from math import isfinite
 
 from groq import (
     APIConnectionError,
@@ -45,8 +46,9 @@ class Failure(Enum):
 
 
 class AnalysisError(Exception):
-    def __init__(self, failure: Failure) -> None:
+    def __init__(self, failure: Failure, retry_after: float | None = None) -> None:
         self.failure = failure
+        self.retry_after = retry_after
         super().__init__(failure.value)
 
 
@@ -86,8 +88,14 @@ async def analyze_with_groq(
         )
     except APITimeoutError:
         raise AnalysisError(Failure.TIMEOUT) from None
-    except RateLimitError:
-        raise AnalysisError(Failure.RATE_LIMIT) from None
+    except RateLimitError as error:
+        header = error.response.headers.get("retry-after", "")
+        try:
+            delay = float(header)
+            retry_after = delay if isfinite(delay) and delay >= 0 else None
+        except ValueError:
+            retry_after = None
+        raise AnalysisError(Failure.RATE_LIMIT, retry_after) from None
     except APIConnectionError:
         raise AnalysisError(Failure.UNAVAILABLE) from None
     except APIStatusError as error:

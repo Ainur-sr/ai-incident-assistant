@@ -1,0 +1,391 @@
+{
+  "version": "1.0.0",
+  "cases": [
+    {
+      "id": "INC-001",
+      "description": "Most synthetic checkout attempts fail to borrow a database connection. The database still serves direct health queries.",
+      "logs": "pool active=20 idle=0 waiting=86; acquire deadline exceeded",
+      "expected_severity": "high",
+      "expected_cause": "db_pool",
+      "relevant_documents": [
+        "db-pool-exhaustion.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-002",
+      "description": "One admin export is intermittently delayed while every available database client is checked out.",
+      "logs": "checkout waited 900ms; no idle pool clients",
+      "expected_severity": "low",
+      "expected_cause": "db_pool",
+      "relevant_documents": [
+        "db-pool-exhaustion.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-003",
+      "description": "A subset of order requests fails after transactions stay open for minutes. The application waits for a client while its SQL spans are also unusually long.",
+      "logs": "pool pending=31; query p95=5s; no idle database clients",
+      "expected_severity": "medium",
+      "expected_cause": "db_pool",
+      "relevant_documents": [
+        "db-pool-exhaustion.md",
+        "slow-db-queries.md"
+      ],
+      "tags": [
+        "multi-document"
+      ]
+    },
+    {
+      "id": "INC-004",
+      "description": "The public front door returns service unavailable to every synthetic request. The gateway reports zero eligible backends.",
+      "logs": "edge status=503 healthy_targets=0",
+      "expected_severity": "critical",
+      "expected_cause": "http_503",
+      "relevant_documents": [
+        "http-503.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-005",
+      "description": "Some requests to the image service get HTTP 503 after backend readiness probes flap, while other routes work.",
+      "logs": "gateway=503 upstream temporarily unavailable",
+      "expected_severity": "medium",
+      "expected_cause": "http_503",
+      "relevant_documents": [
+        "http-503.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-006",
+      "description": "An internal status widget shows a 503 for a single replica. Traffic and the other replicas are healthy.",
+      "logs": "readiness failed; gateway response 503",
+      "expected_severity": "low",
+      "expected_cause": "http_503",
+      "relevant_documents": [
+        "http-503.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-007",
+      "description": "Order processing is badly degraded across replicas. Compute time is saturated and requests queue up during serialization.",
+      "logs": "cpu usage=99%; runnable queue=43; quota throttling rising",
+      "expected_severity": "high",
+      "expected_cause": "high_cpu",
+      "relevant_documents": [
+        "high-cpu.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-008",
+      "description": "A staging worker burns an entire core on a tight polling loop; production is unaffected.",
+      "logs": "worker process cpu=100%; profile shows poll_loop",
+      "expected_severity": "low",
+      "expected_cause": "high_cpu",
+      "relevant_documents": [
+        "high-cpu.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-009",
+      "description": "Some requests slow down while periodic background compression uses the CPU quota.",
+      "logs": "cpu throttled periods=78%; latency p95=4s",
+      "expected_severity": "medium",
+      "expected_cause": "high_cpu",
+      "relevant_documents": [
+        "high-cpu.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-010",
+      "description": "Every synthetic search request fails because all serving processes are repeatedly terminated after exhausting their memory limits.",
+      "logs": "OOMKilled; RSS reached cgroup limit",
+      "expected_severity": "critical",
+      "expected_cause": "memory_oom",
+      "relevant_documents": [
+        "memory-leak-oom.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-011",
+      "description": "One preview worker's retained heap rises after every garbage collection; user-facing traffic is unaffected.",
+      "logs": "heap after GC: 200MB -> 370MB -> 610MB",
+      "expected_severity": "low",
+      "expected_cause": "memory_oom",
+      "relevant_documents": [
+        "memory-leak-oom.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-012",
+      "description": "A subset of file previews fails as preview workers restart when their resident memory hits the configured limit.",
+      "logs": "exit reason=OOMKilled; resident memory grows across batches",
+      "expected_severity": "medium",
+      "expected_cause": "memory_oom",
+      "relevant_documents": [
+        "memory-leak-oom.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-013",
+      "description": "Most customer-facing synthetic order updates are late. The group that handles order events is falling far behind broker partition offsets.",
+      "logs": "Kafka group=order-projection lag=510000; commits stalled",
+      "expected_severity": "high",
+      "expected_cause": "kafka_lag",
+      "relevant_documents": [
+        "kafka-consumer-lag.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-014",
+      "description": "The internal audit stream is delayed for a few minutes while a single Kafka partition accumulates a backlog.",
+      "logs": "partition 4 lag=900; other partitions current",
+      "expected_severity": "low",
+      "expected_cause": "kafka_lag",
+      "relevant_documents": [
+        "kafka-consumer-lag.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-015",
+      "description": "Some thumbnails sync late. The topic receives events faster than consumers acknowledge them and the group keeps rebalancing.",
+      "logs": "Kafka commit rate=18/s; production rate=80/s",
+      "expected_severity": "medium",
+      "expected_cause": "kafka_lag",
+      "relevant_documents": [
+        "kafka-consumer-lag.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-016",
+      "description": "Most webhook deliveries fail before reaching the remote listener. TCP connection establishment stalls from two zones.",
+      "logs": "connect ETIMEDOUT; retransmissions increased",
+      "expected_severity": "high",
+      "expected_cause": "network_timeout",
+      "relevant_documents": [
+        "network-timeouts.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-017",
+      "description": "Some preview requests miss their deadline only while negotiating TLS with the upstream service.",
+      "logs": "TLS handshake timeout; response bytes=0",
+      "expected_severity": "medium",
+      "expected_cause": "network_timeout",
+      "relevant_documents": [
+        "network-timeouts.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-018",
+      "description": "An internal monitor occasionally misses a check while resolving a hostname. No user workflow is affected.",
+      "logs": "DNS lookup timed out; subsequent lookup succeeded",
+      "expected_severity": "low",
+      "expected_cause": "network_timeout",
+      "relevant_documents": [
+        "network-timeouts.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-019",
+      "description": "The entire synthetic billing workflow is unavailable because its primary SQL query waits on locks until each request reaches its deadline. Pool checkout remains fast.",
+      "logs": "statement duration=30s; wait_event=Lock; checkout=1ms",
+      "expected_severity": "critical",
+      "expected_cause": "slow_query",
+      "relevant_documents": [
+        "slow-db-queries.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-020",
+      "description": "A cohort sees slow search results after a query plan switched from an index scan to scanning millions of rows.",
+      "logs": "db span=3.8s; scanned rows=2.1M",
+      "expected_severity": "medium",
+      "expected_cause": "slow_query",
+      "relevant_documents": [
+        "slow-db-queries.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-021",
+      "description": "One internal report takes longer than usual. The SQL fingerprint shows much higher execution time and no other endpoints are affected.",
+      "logs": "query runtime=2.3s; previous baseline=30ms",
+      "expected_severity": "low",
+      "expected_cause": "slow_query",
+      "relevant_documents": [
+        "slow-db-queries.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-022",
+      "description": "Most synthetic jobs fail on the new application version immediately after a rollout, while replicas on the previous version succeed.",
+      "logs": "version=v42 error_rate=74%; version=v41 error_rate=0.1%",
+      "expected_severity": "high",
+      "expected_cause": "deploy_regression",
+      "relevant_documents": [
+        "deployment-regression.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-023",
+      "description": "Only the canary cohort is affected. Enabling the latest feature flag causes its gateway to return 503 because the new health check never passes.",
+      "logs": "flag rev=12 canary readiness failed; gateway 503",
+      "expected_severity": "medium",
+      "expected_cause": "deploy_regression",
+      "relevant_documents": [
+        "deployment-regression.md",
+        "http-503.md"
+      ],
+      "tags": [
+        "multi-document"
+      ]
+    },
+    {
+      "id": "INC-024",
+      "description": "One internal benchmark slows immediately after a config change. The previous revision performs normally under the same traffic.",
+      "logs": "config revision=88 median latency=2x; no user impact",
+      "expected_severity": "low",
+      "expected_cause": "deploy_regression",
+      "relevant_documents": [
+        "deployment-regression.md"
+      ],
+      "tags": [
+        "in-domain"
+      ]
+    },
+    {
+      "id": "INC-025",
+      "description": "A dashboard operator says something seems wrong but provides no timestamp, service name, or user impact.",
+      "logs": null,
+      "expected_severity": "unknown",
+      "expected_cause": "unknown",
+      "relevant_documents": [],
+      "tags": [
+        "ambiguous",
+        "negative"
+      ]
+    },
+    {
+      "id": "INC-026",
+      "description": "A synthetic support ticket asks to change the font on a printed conference badge.",
+      "logs": null,
+      "expected_severity": "unknown",
+      "expected_cause": "unknown",
+      "relevant_documents": [],
+      "tags": [
+        "out-of-domain",
+        "negative"
+      ]
+    },
+    {
+      "id": "INC-027",
+      "description": "Most synthetic users cannot sign in because an identity provider's signing certificate expired. No infrastructure saturation or transport problem was observed.",
+      "logs": "authentication rejected: signing certificate expired",
+      "expected_severity": "high",
+      "expected_cause": "certificate",
+      "relevant_documents": [],
+      "tags": [
+        "out-of-domain",
+        "negative"
+      ]
+    },
+    {
+      "id": "INC-028",
+      "description": "A single test account receives an authorization denial caused by a missing permission grant. Other accounts work.",
+      "logs": "status=403; role lacks export permission",
+      "expected_severity": "low",
+      "expected_cause": "authorization",
+      "relevant_documents": [],
+      "tags": [
+        "out-of-domain",
+        "negative"
+      ]
+    },
+    {
+      "id": "INC-029",
+      "description": "All receipt emails display the wrong currency symbol after a translation dictionary typo, but payment and delivery succeed. This report provides no release timeline.",
+      "logs": "translation-render test: expected £, rendered $; no delay",
+      "expected_severity": "medium",
+      "expected_cause": "localization",
+      "relevant_documents": [],
+      "tags": [
+        "out-of-domain",
+        "negative"
+      ]
+    },
+    {
+      "id": "INC-030",
+      "description": "A sample documentation preview displays the literal phrases CPU high, OOM, network timeout and HTTP 503. Monitoring shows normal CPU and memory and every request succeeds. No service incident occurred.",
+      "logs": "test fixture displayed sample labels only",
+      "expected_severity": "low",
+      "expected_cause": "unknown",
+      "relevant_documents": [],
+      "tags": [
+        "misleading",
+        "negative"
+      ]
+    }
+  ]
+}

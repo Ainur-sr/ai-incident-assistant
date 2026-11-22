@@ -123,3 +123,44 @@ analysis. Check that the hypotheses and limitations reflect the synthetic input
 and that any `sources` resolve to the local runbooks. With RAG disabled, expect
 an empty source list. This check makes a real GroqCloud request and may consume
 provider quota or incur charges.
+
+## Evaluation
+
+The versioned benchmark contains 30 synthetic incidents covering the eight
+runbooks, ambiguity, out-of-domain incidents and misleading inputs. See the
+[labeling guide and metric definitions](evals/README.md).
+
+```bash
+# Real local embeddings. Pre-cache the model as shown above.
+HF_HUB_OFFLINE=1 python -m evals retrieval
+
+# Deterministic analysis baseline using the application's local rules.
+python -m evals mock
+```
+
+Retrieval reports document-level Recall@1, Recall@3, Precision@3, MRR and
+negative-case false positives. Analysis reports severity accuracy and macro-F1,
+leading-cause category accuracy, schema validity, latency, errors, uncertainty
+and citation validity. The mock run checks the pipeline and measures the local
+baseline. It makes no claim about model quality. Both modes run without Groq.
+
+When you explicitly choose to run the live comparison, export the Groq key as
+shown above and use:
+
+```bash
+python -m evals live --allow-live --request-interval 3 --retries 2
+```
+
+Live mode compares paired runs on the same cases and model settings. Pass
+`--case-ids ID [ID ...]` to select distinct dataset cases in the given order.
+A live comparison makes two initial requests per selected case, plus any retries,
+and may incur charges. A full run schedules 60 initial requests. Requests are
+sequential, start at least three seconds apart by default, and pause for at
+least 60 seconds on rate limits or longer if a numeric `Retry-After` header
+requests it. Increase the interval to fit your quota. Timeouts and temporary
+unavailability are retried with bounded exponential backoff.
+
+Each command writes JSON and Markdown under the Git-ignored `evals/results/`
+directory, replacing only the previous reports for the selected mode. Reports
+include run settings and sample counts. Pytest exercises the evaluator with
+doubles and does not invoke GroqCloud or download model weights.
