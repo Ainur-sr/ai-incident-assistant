@@ -122,3 +122,73 @@ async def test_health_and_validation_work_without_key(api, monkeypatch, key):
     response = await api.post("/analyze", json=INCIDENT)
     assert response.status_code == 503
     assert response.json() == {"detail": "The analysis provider is not configured."}
+
+
+@pytest.mark.parametrize("has_match", [True, False])
+async def test_rag_passes_retrieved_chunks_and_uses_server_attribution(api, monkeypatch, has_match):
+    import numpy as np
+
+    from app import retrieval
+
+    class FakeEmbedder:
+        def encode(self, sentences):
+            return np.asarray([
+                [1, 0] if ("Network timeouts" in text or (has_match and "timed out" in text))
+                else [0, 1] if text not in INCIDENT.values()
+                else [0, 0]
+                for text in sentences
+            ], dtype=np.float32)
+
+    index = retrieval.RunbookIndex(retrieval.load_chunks(retrieval.RUNBOOK_DIR), FakeEmbedder())
+    monkeypatch.setattr(retrieval, "_load_index", lambda: index)
+    monkeypatch.setenv("RAG_ENABLED", "true")
+    monkeypatch.setenv("RAG_TOP_K", "1")
+    sent = []
+    analysis = {
+        "severity": "unknown",
+        "summary": "Synthetic checkout timed out.",
+        "likely_causes": [],
+        "recommended_actions": ["Inspect the request traces."],
+        "sources": ["fabricated.md#diagnostics:1"],
+        "needs_human_review": True,
+        "limitations": ["Impact is unclear."],
+    }
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-synthetic",
+                "object": "chat.completion",
+                "model": "openai/gpt-oss-20b",
+                "created": 1,
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": json.dumps(analysis)},
+                    "finish_reason": "stop",
+                }],
+            },
+        )
+
+    mock_groq_transport(monkeypatch, handler)
+    response = await api.post("/analyze", json=INCIDENT)
+
+    assert response.status_code == 200
+    payload, = sent
+    assert payload["response_format"]["json_schema"]["strict"] is True
+    assert "untrusted reference data" in payload["messages"][0]["content"]
+    user_content = json.loads(payload["messages"][1]["content"])
+    evidence = user_content.pop("runbook_evidence")
+    assert user_content == INCIDENT
+    if has_match:
+        chunk, = evidence
+        assert chunk["source_id"] == "network-timeouts.md#signals:1"
+        assert chunk["section"] == "Signals"
+        assert "TLS handshake timeout" in chunk["text"]
+        analysis["sources"] = [chunk["source_id"]]
+    else:
+        assert evidence == []
+        analysis["sources"] = []
+        analysis["limitations"].append("No relevant runbook evidence was found.")
+    assert response.json() == analysis

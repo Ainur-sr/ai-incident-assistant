@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -6,6 +7,7 @@ from app import config
 from app.analysis import analyze_incident
 from app.llm import AnalysisError, Failure, analyze_with_groq, create_groq_client
 from app.models import IncidentAnalysis, IncidentRequest
+from app.retrieval import retrieve
 
 app = FastAPI(title="AI Incident Triage Assistant")
 
@@ -37,19 +39,36 @@ async def health() -> dict[str, str]:
 @app.post("/analyze")
 async def analyze(incident: IncidentRequest) -> IncidentAnalysis:
     mode = config.analysis_mode()
-    if mode == "mock":
-        return analyze_incident(incident)
-    if mode != "groq":
+    if mode not in {"mock", "groq"}:
         raise HTTPException(503, "Analysis mode is misconfigured.")
-
-    api_key = config.groq_api_key()
-    if not api_key:
+    api_key = config.groq_api_key() if mode == "groq" else None
+    if mode == "groq" and not api_key:
         raise HTTPException(503, "The analysis provider is not configured.")
 
     try:
-        async with create_groq_client(api_key) as client:
-            return await analyze_with_groq(incident, client, config.groq_model())
+        top_k = config.rag_top_k()
+    except ValueError:
+        raise HTTPException(503, "RAG is misconfigured.") from None
+
+    evidence = None
+    if top_k is not None:
+        try:
+            evidence = await run_in_threadpool(retrieve, incident.description, incident.logs, top_k)
+        except (ImportError, OSError, RuntimeError, ValueError):
+            raise HTTPException(503, "Runbook retrieval is unavailable.") from None
+
+    try:
+        if api_key is None:
+            result = analyze_incident(incident)
+            result.sources = [chunk.source_id for chunk in evidence or []]
+        else:
+            async with create_groq_client(api_key) as client:
+                result = await analyze_with_groq(incident, client, config.groq_model(), evidence)
     except AnalysisError as error:
         raise HTTPException(
             PROVIDER_ERROR_STATUS[error.failure], error.failure.value
         ) from None
+
+    if evidence == []:
+        result.limitations.append("No relevant runbook evidence was found.")
+    return result

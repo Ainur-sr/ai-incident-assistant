@@ -84,3 +84,27 @@ async def test_rejects_invalid_input(client, payload):
     assert response.status_code == 422
     assert response.json()["detail"]
     assert all("input" not in issue for issue in response.json()["detail"])
+
+
+@pytest.mark.parametrize("enabled,top_k", [("maybe", "3"), ("true", "0"), ("true", "bad")])
+async def test_invalid_rag_setting_keeps_health_available(client, monkeypatch, enabled, top_k):
+    monkeypatch.setenv("RAG_ENABLED", enabled)
+    monkeypatch.setenv("RAG_TOP_K", top_k)
+
+    assert (await client.get("/health")).status_code == 200
+    response = await client.post("/analyze", json={"description": "Synthetic failure"})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "RAG is misconfigured."}
+
+
+async def test_rag_unavailable_returns_sanitized_error(client, monkeypatch):
+    from app import retrieval
+
+    def unavailable():
+        raise OSError("private path")
+
+    monkeypatch.setenv("RAG_ENABLED", "true")
+    monkeypatch.setattr(retrieval, "_load_index", unavailable)
+    response = await client.post("/analyze", json={"description": "Synthetic failure"})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Runbook retrieval is unavailable."}

@@ -4,7 +4,7 @@ A local FastAPI service for triaging synthetic software incidents. It runs offli
 
 ## Setup and run
 
-Use Python 3.12 or newer. If the repository already has a compatible `.venv`, reuse it and skip the first command.
+Use Python 3.14 for the documented setup. If the repository already has a compatible `.venv`, reuse it and skip the first command.
 
 ```bash
 python3 -m venv .venv
@@ -45,17 +45,57 @@ Use `ANALYSIS_MODE=mock` for deterministic offline analysis.
 
 In Groq mode, `POST /analyze` sends the description and logs to GroqCloud. Use
 only synthetic data. Responses include severity, hypotheses, safe diagnostics,
-evidence limitations, and an indicator for human review. The service returns an
-empty `sources` list in both modes.
+evidence limitations, and an indicator for human review. With RAG disabled, `sources` is empty.
 
 | HTTP status | Meaning |
 | --- | --- |
 | 422 | Invalid incident input |
 | 502 | Invalid upstream response or upstream request rejection |
-| 503 | Invalid or missing service configuration, upstream rate limit, or provider unavailability |
+| 503 | Invalid or missing service configuration, upstream rate limit, provider unavailability, or local retrieval failure |
 | 504 | Upstream timeout |
 
 The client uses a 15-second SDK timeout and disables automatic retries.
+
+## Enable local runbook retrieval
+
+With the Python 3.14 virtual environment active, install a CPU build of PyTorch
+and the RAG dependencies. Pre-download the public embedding model once:
+
+```bash
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -r requirements-rag.txt
+python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu", token=False)'
+```
+
+Then start the API with retrieval enabled:
+
+```bash
+export RAG_ENABLED=true
+export RAG_TOP_K=3
+python -m uvicorn app.main:app --reload
+```
+
+Set `ANALYSIS_MODE=groq` and export the key as shown above to include the
+retrieved excerpts in the Groq request. Mock mode can also return local sources
+while keeping its deterministic analysis. The application only loads cached
+model files at runtime. Missing dependencies or weights produce HTTP 503 on
+analysis requests. `GET /health` stays independent of retrieval.
+
+`app/retrieval.py` reads the eight synthetic Markdown files in `runbooks/`,
+splits them on headings and caps long sections at 120 words per chunk. The first
+RAG request embeds the corpus once per process. Restart the process to pick up
+runbook edits. Each search embeds the description and, if present, up to 600
+characters from each end of the logs. NumPy ranks chunks by their highest cosine
+similarity across those query vectors. The cutoff of 0.30 is a starting
+heuristic. Up to `RAG_TOP_K` chunks are returned in descending relevance.
+
+The API attaches source IDs from the selected chunks, such as
+`network-timeouts.md#diagnostics:1`. IDs use the filename, section slug, and
+one-based part number. They identify the excerpts supplied as context. When
+nothing meets the cutoff, analysis continues with empty sources and a limitation
+indicating that no relevant runbook was found. Logs and excerpts are placed in
+the user message as reference data. Use only synthetic incident data and
+runbooks, since Groq mode sends them to the provider.
 
 ## Architecture
 
@@ -68,7 +108,8 @@ model and independently validates the returned JSON before releasing the result.
 
 FastAPI exposes the HTTP API and Uvicorn runs the local server. Pytest and AnyIO
 run the offline tests. HTTPX sends requests directly to the ASGI app and mocks
-Groq's HTTP transport in integration tests.
+Groq's HTTP transport in integration tests. Retrieval tests use deterministic
+NumPy embeddings, so the suite requires neither model weights nor network access.
 
 ## Tests
 
@@ -79,5 +120,6 @@ python -m pytest
 For an optional manual integration check, enable Groq mode and run the
 synthetic `/analyze` curl example above. Expect HTTP 200 with the structured
 analysis. Check that the hypotheses and limitations reflect the synthetic input
-and that `sources` is empty. This check makes a real GroqCloud request and may
-consume provider quota or incur charges.
+and that any `sources` resolve to the local runbooks. With RAG disabled, expect
+an empty source list. This check makes a real GroqCloud request and may consume
+provider quota or incur charges.
