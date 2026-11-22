@@ -7,12 +7,8 @@ pytestmark = pytest.mark.anyio
 
 
 @pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
-
-@pytest.fixture
-async def client():
+async def client(monkeypatch):
+    monkeypatch.setenv("ANALYSIS_MODE", "mock")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as test_client:
