@@ -1,0 +1,133 @@
+
+# ==========================================
+# AI Incident Triage Assistant
+# Python + FastAPI + GroqCloud + RAG
+# ==========================================
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+secrets/
+credentials.json
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# Test and coverage reports
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+test-results/
+
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+.dmypy.json
+.pyright/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# VS Code local settings
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# JetBrains IDE
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+
+# Application logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Local vector stores and RAG indexes
+chroma_db/
+chroma_data/
+vector_store/
+vector_db/
+.faiss_index/
+*.faiss
+*.index
+
+# Downloaded AI/ML models and model weights
+models/
+model_cache/
+.cache/
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# Hugging Face local cache
+.huggingface/
+
+# Local runtime data
+data/local/
+data/cache/
+data/uploads/
+uploads/
+storage/
+
+# Generated evaluation results
+evals/results/
+evals/reports/
+evaluation_results/
+
+# Docker local overrides
+docker-compose.override.yml
+compose.override.yaml
+
+# Terraform (if added later)
+.terraform/
+*.tfstate
+*.tfstate.*
