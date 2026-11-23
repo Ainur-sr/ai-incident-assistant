@@ -87,6 +87,7 @@ async def test_groq_mode_returns_validated_analysis(api, monkeypatch, configured
         (429, 503, "The analysis provider is temporarily rate limited."),
         (503, 503, "The analysis provider is temporarily unavailable."),
         (401, 502, "The analysis provider could not complete the request."),
+        (400, 502, "The analysis provider could not complete the request."),
         ("malformed", 502, "The analysis provider returned an invalid response."),
     ],
 )

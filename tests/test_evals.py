@@ -401,3 +401,119 @@ async def test_evaluation_records_safe_provider_error_details(
     assert report["metrics"]["errors_by_type"] == {category: 1}
     assert report["metrics"]["severity_accuracy"] is None
     assert secret not in json.dumps(report)
+
+
+@pytest.mark.parametrize("with_rag", [False, True])
+async def test_inc025_request_and_http_400(with_rag, groq_client_factory):
+    import httpx
+
+    dataset, _ = cli.load_dataset()
+    case = next(case for case in dataset.cases if case.id == "INC-025")
+    requests = []
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(400, json={"error": {"message": "synthetic rejection"}})
+
+    async with groq_client_factory(handler, api_key="synthetic", max_retries=0) as client:
+        async def analyze(incident, evidence):
+            return await cli.llm.analyze_with_groq(incident, client, "synthetic-model", evidence)
+
+        report = await runner.evaluate_analysis(
+            [case], analyze, (lambda *_: []) if with_rag else None, retries=2
+        )
+
+    payload, = requests
+    expected = {"description": case.description, "logs": None}
+    if with_rag:
+        expected["runbook_evidence"] = []
+    assert json.loads(payload["messages"][1]["content"]) == expected
+    assert payload["response_format"]["type"] == "json_schema"
+    spec = payload["response_format"]["json_schema"]
+    assert spec["strict"] is True
+    schema = spec["schema"]
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    row, = report["cases"]
+    assert row["schema_valid"] is None
+    assert row["attempt_error_details"] == [
+        {"attempt": 1, "category": "http_4xx", "http_status": 400}
+    ]
+
+
+@pytest.mark.parametrize(
+    "hypothesis,expected_matches",
+    [("The backlog may reflect worker contention.", []),
+     ("Kafka consumer lag may coincide with a slow query.", ["kafka_lag", "slow_query"])],
+)
+async def test_unclassified_cause_records_only_matching_categories(hypothesis, expected_matches):
+    dataset, _ = cli.load_dataset()
+    case = next(case for case in dataset.cases if case.id == "INC-014")
+    response = {**valid_analysis(), "likely_causes": [hypothesis]}
+    report = await runner.evaluate_analysis([case], AsyncMock(return_value=response))
+    row, = report["cases"]
+
+    assert row["predicted_cause"] == "unclassified"
+    assert row["cause_category_matches"] == expected_matches
+    assert hypothesis not in json.dumps(report)
+
+
+@pytest.mark.parametrize("wrapped", [True, False])
+async def test_http_400_keeps_only_allowlisted_provider_fields(wrapped, groq_client_factory):
+    import httpx
+
+    secret = "synthetic-private-value"
+    fields = {
+        "type": "invalid_request_error",
+        "code": "json_validate_failed",
+        "param": "response_format",
+        "message": secret,
+        "failed_generation": secret,
+    }
+
+    def handler(request):
+        return httpx.Response(
+            400, json={"error": fields} if wrapped else fields,
+            headers={"x-private": secret},
+        )
+
+    dataset, _ = cli.load_dataset()
+    async with groq_client_factory(handler, api_key=secret, max_retries=0) as client:
+        async def analyze(incident, evidence):
+            return await cli.llm.analyze_with_groq(incident, client, "synthetic-model", evidence)
+
+        report = await runner.evaluate_analysis(dataset.cases[:1], analyze)
+
+    attempt, = report["cases"][0]["attempt_error_details"]
+    assert attempt == {
+        "attempt": 1, "category": "http_4xx", "http_status": 400,
+        "provider_error": {"type": fields["type"], "code": fields["code"], "param": fields["param"]},
+    }
+    assert report["metrics"]["errors_by_type"] == {"http_4xx": 1}
+    assert secret not in json.dumps(report)
+
+
+@pytest.mark.parametrize("body", [
+    "synthetic-private-value",
+    {"error": {"type": "synthetic-private-value", "code": [], "param": {"private": "value"}}},
+])
+def test_provider_metadata_omits_unknown_values_and_non_object_bodies(body):
+    assert cli.llm.safe_provider_error(body) == {}
+
+
+async def test_uncertainty_flags_and_expected_unknown_labels_are_independent():
+    dataset, _ = cli.load_dataset()
+    cases = [case for case in dataset.cases if case.id in {"INC-025", "INC-026", "INC-030"}]
+    analyze = AsyncMock(side_effect=[
+        AnalysisError(Failure.REQUEST_FAILED),
+        {**valid_analysis("low"), "likely_causes": []},
+        {**valid_analysis("low"), "likely_causes": [], "needs_human_review": False},
+    ])
+
+    metrics = (await runner.evaluate_analysis(cases, analyze))["metrics"]
+
+    assert metrics["uncertainty_expected_count"] == 3
+    assert metrics["uncertainty_sample_count"] == 2
+    assert metrics["uncertainty_rate"] == 0.5
+    assert metrics["unknown_label_match_count"] == 1
+    assert metrics["unknown_label_match_rate"] == 0.5

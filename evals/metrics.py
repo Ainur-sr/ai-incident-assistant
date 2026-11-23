@@ -23,17 +23,21 @@ ABSTENTION = re.compile(
 )
 
 
-def cause_category(hypotheses: list[str]) -> str:
+def classify_cause(hypotheses: list[str]) -> tuple[str, list[str]]:
     if not hypotheses:
-        return "unknown"
+        return "unknown", []
     leading = hypotheses[0].strip().rstrip(".")
     if ABSTENTION.fullmatch(leading):
-        return "unknown"
+        return "unknown", []
     matches = [
         category for category, pattern in CAUSE_PATTERNS.items()
         if re.search(pattern, leading, re.IGNORECASE)
     ]
-    return matches[0] if len(matches) == 1 else "unclassified"
+    return (matches[0] if len(matches) == 1 else "unclassified"), matches
+
+
+def cause_category(hypotheses: list[str]) -> str:
+    return classify_cause(hypotheses)[0]
 
 
 def ratio(numerator: int, denominator: int) -> float | None:

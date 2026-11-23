@@ -56,10 +56,37 @@ class ErrorCategory(StrEnum):
     UNKNOWN = "unknown"
 
 
+# These fields can contain arbitrary text. Persist only known literal values.
+SAFE_PROVIDER_ERROR_FIELDS = {
+    "type": {"invalid_request_error"},
+    "code": {
+        "invalid_request_error", "invalid_json_schema", "json_validate_failed",
+        "json_schema_validation_failed", "model_not_found", "context_length_exceeded",
+        "unsupported_value", "invalid_value", "missing_required_parameter",
+        "unsupported_parameter", "invalid_parameter",
+    },
+    "param": {"model", "messages", "response_format", "response_format.json_schema"},
+}
+
+
+def safe_provider_error(body: object) -> dict[str, str]:
+    if not isinstance(body, dict):
+        return {}
+    fields = body.get("error", body)
+    if not isinstance(fields, dict):
+        return {}
+    return {
+        name: value
+        for name, allowed in SAFE_PROVIDER_ERROR_FIELDS.items()
+        if isinstance(value := fields.get(name), str) and value in allowed
+    }
+
+
 class AnalysisError(Exception):
     def __init__(
         self, failure: Failure, retry_after: float | None = None, *,
         category: ErrorCategory | None = None, http_status: int | None = None,
+        provider_error: dict[str, str] | None = None,
     ) -> None:
         self.failure = failure
         self.retry_after = retry_after
@@ -69,6 +96,7 @@ class AnalysisError(Exception):
             Failure.INVALID_RESPONSE: ErrorCategory.INVALID_RESPONSE,
         }.get(failure, ErrorCategory.UNKNOWN)
         self.http_status = http_status
+        self.provider_error = provider_error or {}
         super().__init__(failure.value)
 
 
@@ -126,7 +154,10 @@ async def analyze_with_groq(
             category = ErrorCategory.HTTP_4XX
         elif 500 <= status < 600:
             category = ErrorCategory.HTTP_5XX
-        raise AnalysisError(failure, category=category, http_status=status) from None
+        raise AnalysisError(
+            failure, category=category, http_status=status,
+            provider_error=safe_provider_error(error.body) if status == 400 else None,
+        ) from None
     except (APIResponseValidationError, JSONDecodeError, ValidationError):
         raise AnalysisError(Failure.INVALID_RESPONSE) from None
     except APIError:

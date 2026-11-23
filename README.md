@@ -149,6 +149,32 @@ schema validity, latency, errors, uncertainty
 and citation validity. The mock run checks the pipeline and measures the local
 baseline. It makes no claim about model quality. Both modes run without Groq.
 
+### Saved 30-case results
+
+Dataset 1.0.0, `openai/gpt-oss-20b`, 2026-11-23 UTC, provider sampling
+defaults, three RAG chunks, six seconds between requests, and one allowed retry.
+
+| Metric | Without RAG | With RAG |
+| --- | ---: | ---: |
+| API analysis success, all 30 scheduled cases per arm | 26/30 (86.67%) | 26/30 (86.67%) |
+| Severity accuracy, 22 shared successes | 14/22 (63.64%) | 15/22 (68.18%) |
+| Leading-cause category accuracy, 22 shared successes | 18/22 (81.82%) | 20/22 (90.91%) |
+| Severity accuracy, each arm's 26 successes | 17/26 (65.38%) | 16/26 (61.54%) |
+| Leading-cause category accuracy, each arm's 26 successes | 21/26 (80.77%) | 24/26 (92.31%) |
+
+The separate offline retrieval report measured document Recall@1 of 91.67%,
+Recall@3 of 100%, Precision@3 of 36.11%, and MRR of 0.9722 on 24 cases with
+labeled runbooks. One of six negatives returned a document. These scores
+measure ranking and use no model-generated analyses.
+
+To recompute the tables from the saved run, use the offline `rescore` command
+below with `live.json` and `retrieval.json`. The original reports are local
+artifacts under `evals/results/`. This single run uses a small, unbalanced
+synthetic dataset. Provider sampling and failures can change scores on rerun.
+The paired comparison excludes cases that failed in either arm, and the
+lexical cause score measures agreement with category labels. See the
+[full audit and uncertainty results](evals/README.md#full-30-case-run-audit).
+
 When you explicitly choose to run the live comparison, export the Groq key as
 shown above and use:
 

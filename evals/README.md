@@ -165,3 +165,70 @@ qualitative assessment. For each criterion record `pass`, `partial`, or
 
 The automatic reports contain category labels and source IDs. They do not
 store raw generated text or assign subjective scores.
+
+### Saved follow-up run
+
+The follow-up report records HTTP 400 for INC-025 in both arms, with one
+attempt per arm and no schema verdict. The synthetic input has no logs. The
+serialized input uses `logs: null`, and the RAG arm adds an empty
+`runbook_evidence` list. Mocked transport tests verify this request shape,
+strict response schema settings, and 400 handling. The report contains no
+provider error reason, so it cannot explain the rejection.
+
+INC-014 was classified as `kafka_lag` without RAG and `unclassified` with
+RAG in the follow-up run. The original pilot above is a separate run.
+The follow-up report lacks the leading hypothesis, so the mismatch cannot
+be attributed to the model or the classifier. New reports include
+`cause_category_matches` to distinguish zero regex hits from multiple hits
+without keeping hypothesis text. A failed analysis has a null match list.
+Rescoring preserves historical predictions and does not infer missing hits.
+
+For HTTP 400, future attempts also include a `provider_error` object when
+known structured values are present. It may contain `type`, `code` and
+`param`, for example `invalid_request_error`, `json_validate_failed` and
+`response_format`. Fields outside the per-field allowlists are omitted.
+Provider messages, failed generations, request and response bodies, and
+headers are excluded. The original status and error category still drive
+the existing metrics. Historical reports cannot supply missing metadata.
+
+### Full 30-case run audit
+
+The saved run completed on 2026-11-23 UTC with dataset 1.0.0,
+`openai/gpt-oss-20b`, provider sampling defaults, three RAG chunks, a
+six-second request interval, and one allowed retry. The eight unpaired
+cases each succeeded in the opposite arm.
+
+| Failed arm | Incident IDs | Stored category | HTTP status |
+| --- | --- | --- | --- |
+| Without RAG | INC-002, INC-004, INC-019, INC-027 | `http_4xx` | 400 |
+| With RAG | INC-007, INC-013, INC-024, INC-025 | `http_4xx` | 400 |
+
+All eight failures occurred on attempt one and recorded
+`type=invalid_request_error` and `code=json_validate_failed`. None recorded
+a parameter. The provider reported a JSON validation problem across both
+arms and multiple incident types. The saved metadata cannot identify the
+violated constraint or determine what caused it. The three HTTP 429 attempts
+(INC-006 and INC-023 without RAG, INC-014 with RAG) recovered on retry.
+
+The existing uncertainty rate checks human-review and limitations fields
+among successful cases with at least one expected `unknown` label. It was
+2/3 without RAG and 0/2 with RAG. The new `unknown_label_match_rate` measures
+whether all fields expected to be `unknown` were predicted as `unknown`,
+using the same denominator. It was 1/3 and 0/2 respectively on rescore.
+
+- INC-025 lacks impact and diagnostic evidence. Without RAG it returned both
+  unknown labels and expressed uncertainty. With RAG the HTTP 400 left
+  uncertainty unassessed.
+- INC-026 is an out-of-domain support request. Both arms returned unknown
+  cause but assigned low severity and missed the uncertainty field check.
+- INC-030 contains literal alert phrases in a documentation preview, with
+  monitoring reporting normal operation. Both arms returned low severity
+  and an unclassified cause. The baseline passed the uncertainty field check.
+  An unclassified cause can reflect either zero or multiple lexical hits.
+
+Cause scores measure a lexical category match on the first hypothesis. They
+cannot establish that the hypothesis is supported, account for negation
+reliably, or give credit for a later correct hypothesis. Runbook IDs indicate
+supplied evidence, and manual review is needed to determine which claims it
+actually supports. The paired set excludes eight cases with failures, so
+paired and all-successful scores describe different populations.

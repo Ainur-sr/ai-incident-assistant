@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from app.llm import AnalysisError, ErrorCategory, Failure
 from app.models import IncidentAnalysis, IncidentRequest, Severity
 from app.retrieval import RunbookChunk
-from evals.metrics import CAUSE_PATTERNS, cause_category, ratio, retrieval_metrics, severity_metrics
+from evals.metrics import CAUSE_PATTERNS, classify_cause, ratio, retrieval_metrics, severity_metrics
 
 
 class Case(IncidentRequest):
@@ -101,6 +101,7 @@ async def evaluate_case(
             attempts += 1
             retryable = False
             http_status = None
+            provider_error = {}
             try:
                 raw = await analyze(case.incident(), evidence)
                 result = IncidentAnalysis.model_validate(raw, strict=True)
@@ -110,6 +111,7 @@ async def evaluate_case(
             except AnalysisError as exc:
                 error = exc.category.value
                 http_status = exc.http_status
+                provider_error = exc.provider_error
                 retryable = exc.failure in RETRYABLE
                 if exc.category is ErrorCategory.SCHEMA_VALIDATION:
                     schema_valid = False
@@ -121,13 +123,16 @@ async def evaluate_case(
                 break
 
             attempt_errors.append(error)
-            attempt_error_details.append({"attempt": attempts, "category": error, "http_status": http_status})
+            detail = {"attempt": attempts, "category": error, "http_status": http_status}
+            if provider_error:
+                detail["provider_error"] = provider_error
+            attempt_error_details.append(detail)
             if not retryable:
                 break
             if attempt < retries and error != ErrorCategory.HTTP_429:
                 await sleep(2 ** attempt)
 
-    predicted_cause = cause_category(result.likely_causes) if result else None
+    predicted_cause, cause_matches = classify_cause(result.likely_causes) if result else (None, None)
     uncertainty_expected = "unknown" in (case.expected_severity, case.expected_cause)
     return {
         "id": case.id,
@@ -135,6 +140,7 @@ async def evaluate_case(
         "predicted_severity": result.severity if result else None,
         "expected_cause": case.expected_cause,
         "predicted_cause": predicted_cause,
+        "cause_category_matches": cause_matches,
         "schema_valid": schema_valid,
         "error": error,
         "attempts": attempts,
@@ -166,6 +172,11 @@ def analysis_report(rows: list[dict]) -> dict:
     valid = sum(row["schema_valid"] is True for row in rows)
     invalid = sum(row["schema_valid"] is False for row in rows)
     uncertain = [row for row in successes if row["uncertainty_expected"]]
+    abstained = sum(
+        all(row[f"predicted_{field}"] == "unknown"
+            for field in ("severity", "cause") if row[f"expected_{field}"] == "unknown")
+        for row in uncertain
+    )
     citing = [row for row in successes if row["sources"]]
     checked_citations = [row for row in citing if row["citations_valid"] is not None]
     coverage = []
@@ -212,6 +223,8 @@ def analysis_report(rows: list[dict]) -> dict:
             "analysis_attempts": sum(row["attempts"] for row in rows),
             "uncertainty_expected_count": sum(row["uncertainty_expected"] for row in rows),
             "uncertainty_sample_count": len(uncertain),
+            "unknown_label_match_count": abstained,
+            "unknown_label_match_rate": ratio(abstained, len(uncertain)),
             "uncertainty_rate": ratio(sum(row["uncertainty_present"] for row in uncertain), len(uncertain)),
             "responses_with_sources": len(citing),
             "source_coverage_rate": ratio(len(citing), len(successes)),
