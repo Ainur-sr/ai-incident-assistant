@@ -55,23 +55,102 @@ and the individual document rankings.
   Multiple matches and unmatched text are `unclassified`. An empty list or an
   explicit abstention phrase is `unknown`. This lexical heuristic can miss
   paraphrases, match a negated claim, or penalize a correct lower-ranked cause.
-- Validation uses the strict Pydantic response schema. Both accuracy
-  denominators include failed cases, which count as incorrect. Reports also
-  count terminal failures, attempted calls and errors on individual attempts,
-  including attempts that subsequently recovered.
-- The uncertainty check applies when expected severity or cause is `unknown`.
-  It requires both a human-review flag and a nonempty limitations list.
-  Citation validity is the fraction of valid responses for which every cited
-  ID belongs to the supplied chunks. Empty lists pass. This measures attribution
-  integrity and does not assess whether the answer used the evidence correctly.
+- Success rate divides cases yielding a schema-valid analysis by all scheduled
+  cases. Accuracy and macro-F1 use only those successful cases. Wrong
+  predictions and terminal failures have separate counts. Attempt errors
+  include errors from calls that later recovered on retry.
+- Schema validity divides passes by cases with an observed validation outcome.
+  A strict incident payload rejection counts as `schema_validation`, whether
+  detected by the provider adapter or by the evaluator. Missing, truncated,
+  or malformed completions use `invalid_response` and remain unassessed, as
+  do transport failures. Legacy failed rows are unassessed because their
+  schema flag represented whether analysis succeeded.
+- The uncertainty check applies to successful responses when expected
+  severity or cause is `unknown`. It requires both a human-review flag and a
+  nonempty limitations list. The count of all cases that expected uncertainty
+  is reported separately. Metrics with an empty denominator are JSON `null`.
+- Citation validity is the fraction of checked, nonempty source lists for
+  which every chunk ID was supplied to the analyzer. Source coverage is the
+  fraction of successful analyses with a nonempty source list, even if a
+  citation is invalid. Relevant source recall averages, across successful
+  cases with labeled runbooks, the fraction of distinct expected documents
+  represented by verified chunks. Empty lists score zero on positive cases.
+  For legacy rows, recall uses the saved citation verdict. A legacy nonempty
+  list without a passing verdict is omitted because individual chunk membership
+  is unknown. The live adapter attaches retrieved IDs itself, so these measures
+  describe attribution and document coverage. Grounding requires manual review.
 - Latency uses a monotonic wall clock and covers retrieval, analysis requests,
   pacing, retries and retry delays. It includes failures. Live mode builds the
   index before timing begins.
-- Live mode pairs the same 30 cases with and without RAG using one model and
+- Live mode pairs the same selected cases with and without RAG using one model and
   the same provider sampling settings and strict schema. It alternates arm
-  order and reports RAG minus baseline deltas. Provider sampling, deployment,
+  order and reports RAG minus baseline deltas on cases that succeeded in both
+  arms, matched by incident ID. Provider sampling, deployment,
   network conditions and rate limits can affect results across runs. A single
   run does not establish a reliable improvement.
+
+### Failure classification
+
+New analysis rows record terminal categories in `error`. The
+`attempt_error_details` list records each failed attempt, including errors
+that recovered on retry. It contains the one-based attempt number, category,
+and upstream HTTP status when available. Categories include `http_429`,
+`http_4xx` (excluding 429), `http_5xx`, `timeout`, `connection`,
+`schema_validation`, `invalid_response`, and `unknown`. A retrieval failure
+before a provider call is `retrieval_unavailable` and has zero attempts.
+The evaluator records only controlled categories and numeric metadata.
+Exception messages, headers, bodies, and validation inputs are excluded.
+Historic error codes survive rescoring as recorded.
+
+### Offline report rescoring
+
+```bash
+python -m evals rescore --saved-report evals/results/live.json
+```
+
+The command writes `live-rescored.json` and `live-rescored.md` next to the
+original, leaving the original intact. It also supports saved `mock` and
+`retrieval` reports. It uses saved case outcomes without provider calls or
+retrieval. For older analysis reports, it restores expected document labels
+only if the local dataset matches the saved SHA-256. It preserves run
+settings and timestamps and adds a separate rescoring timestamp.
+
+### Five-case pilot
+
+On dataset 1.0.0 with `openai/gpt-oss-20b`, zero retries, and up to three RAG
+chunks, baseline success was 4/5 and RAG success was 3/5. Among successes,
+severity and leading-cause category accuracy were 2/4 and 2/4 without RAG
+and 0/3 and 3/3 with RAG. The common cases were INC-001, INC-004 and INC-014.
+On those cases, severity changed from 1/3 to 0/3 and leading-cause accuracy
+changed from 1/3 to 3/3. INC-004 lost its severity match and gained a cause
+match. INC-014 gained a cause match. INC-001 kept its cause match and missed
+severity in both arms.
+
+The saved error was `request_failed` for INC-025 in both arms and INC-023
+with RAG. The adapter maps non-5xx HTTP status errors to this category after
+handling rate limits, and also uses it for other uncategorized SDK API
+errors. The report does not preserve HTTP status, provider error codes or
+bodies, so finer attribution is unavailable. The only expected-uncertainty
+case failed in both arms. All seven delivered analyses passed schema
+validation. Baseline source coverage was 0/4, with no lists to score for
+citation validity. RAG source coverage and recorded citation validity were
+both 3/3, and every successful RAG case covered all its expected runbooks.
+The original report stores the citation verdict but lacks the full retrieved
+chunk inputs and raw model output, so independent revalidation is unavailable.
+
+### Pilot label audit
+
+| Case | Severity | Evidence and leading-cause category |
+| --- | --- | --- |
+| INC-001 | high | Most checkout attempts fail while direct database health queries still work. Pool utilization, zero idle clients, and queued borrowers support `db_pool`. |
+| INC-004 | critical | Every request at the public entry point returns unavailable. Zero eligible backends support `http_503` (gateway or upstream availability). |
+| INC-014 | low | A brief internal audit delay affects one Kafka partition. The isolated backlog supports `kafka_lag`. |
+
+The dataset labels and version are unchanged. Regression cases cover narrow
+paraphrases for checked-out clients, zero eligible backends, and a partition
+backlog. The saved pilot contains category labels only, so rescoring keeps the
+historical classifications. The unclassified baseline predictions for INC-004
+and INC-014 cannot be traced to a specific phrase.
 
 ### Manual quality rubric
 

@@ -4,14 +4,18 @@ import math
 from datetime import UTC, datetime
 from hashlib import sha256
 from importlib.metadata import PackageNotFoundError, version
-from json import dumps
+from json import dumps, loads
 from pathlib import Path
 
 from app import config, llm, retrieval
 from app.analysis import analyze_incident
 from app.models import IncidentRequest
 from app.retrieval import RunbookChunk
-from evals.runner import Case, Dataset, compare_rag, evaluate_analysis, evaluate_retrieval, pace
+from evals.metrics import retrieval_metrics
+from evals.runner import (
+    Case, Dataset, analysis_report, compare_rag, comparison_report,
+    evaluate_analysis, evaluate_retrieval, pace,
+)
 
 EVAL_DIR = Path(__file__).resolve().parent
 DATASET_PATH = EVAL_DIR / "incidents-v1.json"
@@ -28,10 +32,11 @@ def installed_versions(*names: str) -> dict:
     return versions
 
 
-def write_reports(report: dict, directory: Path = RESULTS_DIR) -> tuple[Path, Path]:
+def write_reports(report: dict, directory: Path = RESULTS_DIR, *, stem: str | None = None) -> tuple[Path, Path]:
     directory.mkdir(parents=True, exist_ok=True)
-    json_path = directory / f"{report['mode']}.json"
-    markdown_path = directory / f"{report['mode']}.md"
+    stem = stem or report["mode"]
+    json_path = directory / f"{stem}.json"
+    markdown_path = directory / f"{stem}.md"
     json_path.write_text(dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     lines = [
         f"# Incident evaluation — {report['mode']}", "",
@@ -46,7 +51,9 @@ def write_reports(report: dict, directory: Path = RESULTS_DIR) -> tuple[Path, Pa
     sections = (
         [("Without RAG", results["without_rag"]["metrics"]),
          ("With RAG", results["with_rag"]["metrics"]),
-         ("With minus without", results["with_minus_without"])]
+         ("Paired without RAG", results["paired"]["without_rag"]),
+         ("Paired with RAG", results["paired"]["with_rag"]),
+         ("Paired with minus without", results["paired"]["with_minus_without"])]
         if report["mode"] == "live" else [("Metrics", results["metrics"])]
     )
     for heading, metrics in sections:
@@ -54,6 +61,18 @@ def write_reports(report: dict, directory: Path = RESULTS_DIR) -> tuple[Path, Pa
         for key, value in metrics.items():
             display = f"{value:.4f}" if isinstance(value, float) else dumps(value)
             lines.append(f"| {key} | {display} |")
+    if report["mode"] == "live":
+        lines += ["", "## Case outcomes", "",
+                  "| Incident | Without RAG | With RAG | Paired |", "| --- | --- | --- | --- |"]
+        paired_ids = set(results["paired"]["case_ids"])
+        arms = [
+            {row["id"]: row["error"] or f"{row['predicted_severity']} / {row['predicted_cause']}"
+             for row in results[arm]["cases"]}
+            for arm in ("without_rag", "with_rag")
+        ]
+        for case_id in dict.fromkeys([*arms[0], *arms[1]]):
+            lines.append(f"| {case_id} | {arms[0].get(case_id, '—')} | "
+                         f"{arms[1].get(case_id, '—')} | {'yes' if case_id in paired_ids else 'no'} |")
     lines += [
         "", "See the JSON report for individual case outcomes.",
         "Subjective quality was not scored. See the manual rubric in evals/README.md.",
@@ -83,9 +102,50 @@ async def run_live(
         return await compare_rag(cases, pace(analyze, interval), retrieval.retrieve, 3, retries)
 
 
+def rescore_report(report: dict) -> dict:
+    results = report["results"]
+    mode = report["mode"]
+    if mode == "retrieval":
+        rows = results["cases"]
+        updated = {"cases": rows, "metrics": retrieval_metrics([
+            (row["expected_documents"], row["retrieved_documents"]) for row in rows
+        ])}
+    elif mode in ("live", "mock"):
+        raw_dataset = DATASET_PATH.read_bytes()
+        labels = {}
+        if sha256(raw_dataset).hexdigest() == report["settings"]["dataset_sha256"]:
+            dataset = Dataset.model_validate_json(raw_dataset, strict=True)
+            labels = {case.id: case.relevant_documents for case in dataset.cases}
+
+        def normalize(rows: list[dict]) -> list[dict]:
+            return [
+                {
+                    **row,
+                    "schema_valid": (
+                        None if "retrieved_source_ids" not in row and row["error"]
+                        else row["schema_valid"]
+                    ),
+                    "expected_documents": row.get("expected_documents", labels.get(row["id"])),
+                }
+                for row in rows
+            ]
+
+        if mode == "live":
+            updated = comparison_report(
+                normalize(results["without_rag"]["cases"]),
+                normalize(results["with_rag"]["cases"]),
+            )
+        else:
+            updated = analysis_report(normalize(results["cases"]))
+    else:
+        raise ValueError("Unsupported report mode.")
+    return {**report, "rescored_at_utc": datetime.now(UTC).isoformat(), "results": updated}
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Evaluate synthetic incidents.")
-    parser.add_argument("mode", choices=("retrieval", "mock", "live"))
+    parser.add_argument("mode", choices=("retrieval", "mock", "live", "rescore"))
+    parser.add_argument("--saved-report", type=Path, help="Saved JSON report to rescore offline.")
     parser.add_argument("--allow-live", action="store_true", help="Authorize real GroqCloud requests.")
     parser.add_argument("--case-ids", nargs="+", metavar="ID", help="Evaluate selected cases in the given order.")
     parser.add_argument("--request-interval", type=float, default=3.0)
@@ -97,6 +157,17 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("--allow-live is only valid in live mode.")
     if not math.isfinite(args.request_interval) or args.request_interval < 0 or not 0 <= args.retries <= 5:
         parser.error("Request interval must be finite and nonnegative, and retries must be 0–5.")
+
+    if args.mode == "rescore":
+        if args.saved_report is None or args.case_ids:
+            parser.error("Rescoring requires --saved-report and uses its original cases.")
+        source = args.saved_report
+        report = rescore_report(loads(source.read_text(encoding="utf-8")))
+        for path in write_reports(report, source.parent, stem=f"{source.stem}-rescored"):
+            print(path)
+        return
+    if args.saved_report is not None:
+        parser.error("--saved-report is only valid in rescore mode.")
 
     dataset, dataset_digest = load_dataset()
     cases = dataset.cases

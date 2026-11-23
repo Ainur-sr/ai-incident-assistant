@@ -1,6 +1,6 @@
 import logging
 from dataclasses import asdict
-from enum import Enum
+from enum import Enum, StrEnum
 from json import JSONDecodeError, dumps
 from math import isfinite
 
@@ -45,10 +45,30 @@ class Failure(Enum):
     REQUEST_FAILED = "The analysis provider could not complete the request."
 
 
+class ErrorCategory(StrEnum):
+    HTTP_429 = "http_429"
+    HTTP_4XX = "http_4xx"
+    HTTP_5XX = "http_5xx"
+    TIMEOUT = "timeout"
+    CONNECTION = "connection"
+    SCHEMA_VALIDATION = "schema_validation"
+    INVALID_RESPONSE = "invalid_response"
+    UNKNOWN = "unknown"
+
+
 class AnalysisError(Exception):
-    def __init__(self, failure: Failure, retry_after: float | None = None) -> None:
+    def __init__(
+        self, failure: Failure, retry_after: float | None = None, *,
+        category: ErrorCategory | None = None, http_status: int | None = None,
+    ) -> None:
         self.failure = failure
         self.retry_after = retry_after
+        self.category = category or {
+            Failure.TIMEOUT: ErrorCategory.TIMEOUT,
+            Failure.RATE_LIMIT: ErrorCategory.HTTP_429,
+            Failure.INVALID_RESPONSE: ErrorCategory.INVALID_RESPONSE,
+        }.get(failure, ErrorCategory.UNKNOWN)
+        self.http_status = http_status
         super().__init__(failure.value)
 
 
@@ -95,12 +115,18 @@ async def analyze_with_groq(
             retry_after = delay if isfinite(delay) and delay >= 0 else None
         except ValueError:
             retry_after = None
-        raise AnalysisError(Failure.RATE_LIMIT, retry_after) from None
+        raise AnalysisError(Failure.RATE_LIMIT, retry_after, http_status=429) from None
     except APIConnectionError:
-        raise AnalysisError(Failure.UNAVAILABLE) from None
+        raise AnalysisError(Failure.UNAVAILABLE, category=ErrorCategory.CONNECTION) from None
     except APIStatusError as error:
         failure = Failure.UNAVAILABLE if error.status_code >= 500 else Failure.REQUEST_FAILED
-        raise AnalysisError(failure) from None
+        status = error.status_code
+        category = ErrorCategory.UNKNOWN
+        if 400 <= status < 500:
+            category = ErrorCategory.HTTP_4XX
+        elif 500 <= status < 600:
+            category = ErrorCategory.HTTP_5XX
+        raise AnalysisError(failure, category=category, http_status=status) from None
     except (APIResponseValidationError, JSONDecodeError, ValidationError):
         raise AnalysisError(Failure.INVALID_RESPONSE) from None
     except APIError:
@@ -112,7 +138,13 @@ async def analyze_with_groq(
         if choice.finish_reason != "stop" or not content:
             raise AnalysisError(Failure.INVALID_RESPONSE)
         result = IncidentAnalysis.model_validate_json(content, strict=True)
-    except (AttributeError, IndexError, TypeError, ValidationError):
+    except ValidationError as error:
+        category = (
+            ErrorCategory.INVALID_RESPONSE if error.errors(include_input=False, include_context=False)[0]["type"] == "json_invalid"
+            else ErrorCategory.SCHEMA_VALIDATION
+        )
+        raise AnalysisError(Failure.INVALID_RESPONSE, category=category) from None
+    except (AttributeError, IndexError, TypeError):
         raise AnalysisError(Failure.INVALID_RESPONSE) from None
 
     # Only the application can attach verified sources.

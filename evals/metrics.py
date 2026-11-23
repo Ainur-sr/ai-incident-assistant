@@ -4,11 +4,11 @@ from statistics import mean
 SEVERITIES = ("low", "medium", "high", "critical", "unknown")
 # Match the leading hypothesis against domain signals or common paraphrases.
 CAUSE_PATTERNS = {
-    "db_pool": r"\b(?:connection|client) pool\b|pool (?:checkout|exhaust|saturat)|no (?:idle|available) (?:database )?connections",
-    "http_503": r"no (?:healthy|ready|eligible) (?:upstreams?|backends?|targets?)|readiness (?:probe|check|fail)|\b503\b|upstream (?:unavailable|overload)",
+    "db_pool": r"\b(?:connection|client) pool\b|pool (?:checkout|exhaust|saturat)|no (?:idle|available) (?:database )?connections|\bdatabase (?:clients?|connections?) (?:are |were )?all checked out\b",
+    "http_503": r"\b(?:no|zero) (?:healthy|ready|eligible) (?:upstreams?|backends?|targets?)|readiness (?:probe|check|fail)|\b503\b|upstream (?:unavailable|overload)",
     "high_cpu": r"\bcpu\b|processor saturat|hot loop|tight (?:polling )?loop",
     "memory_oom": r"memory (?:leak|exhaust|limit|pressure)|out.of.memory|\boom(?:killed)?\b|(?:retained|growing) heap",
-    "kafka_lag": r"\bkafka\b|consumer (?:group|lag|backlog)|(?:partition|commit) offsets?",
+    "kafka_lag": r"\bkafka\b|consumer (?:group|lag|backlog)|(?:partition|commit) offsets?|\bpartition(?: \d+)? (?:has (?:a )?)?(?:backlog|lag)\b",
     "network_timeout": r"\b(?:dns|tcp|tls|etimedout)\b|network (?:timeout|connect|latency)|connection (?:establishment|timed? ?out)",
     "slow_query": r"(?:slow|expensive) (?:sql |database )?quer|query (?:plan|execution|latency|runtime)|lock (?:wait|contention)|(?:index|table|sequential) scan",
     "deploy_regression": r"deploy|rollout|canary|feature flag|(?:new|latest|recent) (?:release|version|revision|config)",
@@ -80,7 +80,7 @@ def retrieval_metrics(
     }
 
 
-def severity_metrics(samples: list[tuple[str, str | None]]) -> dict[str, float | None]:
+def severity_metrics(samples: list[tuple[str, str]]) -> dict[str, float | None]:
     if not samples:
         return {"severity_accuracy": None, "severity_macro_f1": None}
     f1 = []

@@ -2,7 +2,6 @@ import json
 
 import httpx
 import pytest
-from groq import AsyncGroq
 
 from app import llm
 from app.main import app
@@ -27,20 +26,18 @@ async def api(monkeypatch):
         yield client
 
 
-def mock_groq_transport(monkeypatch, handler):
+def mock_groq_transport(monkeypatch, handler, groq_client_factory):
     def create_client(**kwargs):
         assert kwargs["api_key"] == "synthetic-key"
         assert kwargs["timeout"] == 15.0
         assert kwargs["max_retries"] == 0
-        return AsyncGroq(
-            **kwargs, http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
-        )
+        return groq_client_factory(handler, **kwargs)
 
     monkeypatch.setattr(llm, "AsyncGroq", create_client)
 
 
 @pytest.mark.parametrize("configured_model", [None, "openai/gpt-oss-120b"])
-async def test_groq_mode_returns_validated_analysis(api, monkeypatch, configured_model):
+async def test_groq_mode_returns_validated_analysis(api, monkeypatch, configured_model, groq_client_factory):
     if configured_model:
         monkeypatch.setenv("GROQ_MODEL", configured_model)
     analysis = {
@@ -76,7 +73,7 @@ async def test_groq_mode_returns_validated_analysis(api, monkeypatch, configured
             },
         )
 
-    mock_groq_transport(monkeypatch, handler)
+    mock_groq_transport(monkeypatch, handler, groq_client_factory)
     response = await api.post("/analyze", json=INCIDENT)
     assert response.status_code == 200
     assert response.json() == analysis
@@ -93,7 +90,7 @@ async def test_groq_mode_returns_validated_analysis(api, monkeypatch, configured
         ("malformed", 502, "The analysis provider returned an invalid response."),
     ],
 )
-async def test_groq_failures_are_sanitized(api, monkeypatch, failure, status, detail):
+async def test_groq_failures_are_sanitized(api, monkeypatch, failure, status, detail, groq_client_factory):
     def handler(request):
         if failure == "timeout":
             raise httpx.ReadTimeout("synthetic-key", request=request)
@@ -105,7 +102,7 @@ async def test_groq_failures_are_sanitized(api, monkeypatch, failure, status, de
             )
         return httpx.Response(failure, json={"error": {"message": "synthetic-key"}})
 
-    mock_groq_transport(monkeypatch, handler)
+    mock_groq_transport(monkeypatch, handler, groq_client_factory)
     response = await api.post("/analyze", json=INCIDENT)
     assert response.status_code == status
     assert response.json() == {"detail": detail}
@@ -125,7 +122,7 @@ async def test_health_and_validation_work_without_key(api, monkeypatch, key):
 
 
 @pytest.mark.parametrize("has_match", [True, False])
-async def test_rag_passes_retrieved_chunks_and_uses_server_attribution(api, monkeypatch, has_match):
+async def test_rag_passes_retrieved_chunks_and_uses_server_attribution(api, monkeypatch, has_match, inline_retrieval, groq_client_factory):
     import numpy as np
 
     from app import retrieval
@@ -171,7 +168,7 @@ async def test_rag_passes_retrieved_chunks_and_uses_server_attribution(api, monk
             },
         )
 
-    mock_groq_transport(monkeypatch, handler)
+    mock_groq_transport(monkeypatch, handler, groq_client_factory)
     response = await api.post("/analyze", json=INCIDENT)
 
     assert response.status_code == 200

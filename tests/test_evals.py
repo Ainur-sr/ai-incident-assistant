@@ -38,8 +38,8 @@ def test_metrics_handle_empty_populations():
     assert severity_metrics([])["severity_accuracy"] is None
 
 
-def test_severity_metrics_count_failures_and_weight_labels_equally():
-    metrics = severity_metrics([("low", "low"), ("low", None), ("high", "critical")])
+def test_severity_metrics_weights_labels_equally():
+    metrics = severity_metrics([("low", "low"), ("low", "medium"), ("high", "critical")])
 
     assert metrics["severity_accuracy"] == pytest.approx(1 / 3)
     assert metrics["severity_macro_f1"] == pytest.approx((2 / 3) / 5)
@@ -138,11 +138,13 @@ async def test_retry_records_recovery_and_rejects_invalid_responses(monkeypatch)
     pause.assert_awaited_once_with(1)
     metrics = report["metrics"]
     assert metrics["schema_valid_count"] == 1
-    assert metrics["severity_accuracy"] == 0.5
-    assert metrics["cause_accuracy"] == 0.5
+    assert metrics["schema_invalid_count"] == 1
+    assert metrics["schema_valid_rate"] == 0.5
+    assert metrics["severity_accuracy"] == 1
+    assert metrics["cause_accuracy"] == 1
     assert metrics["analysis_attempts"] == 3
-    assert metrics["errors_by_type"] == {"invalid_response": 1}
-    assert metrics["attempt_errors_by_type"] == {"timeout": 1, "invalid_response": 1}
+    assert metrics["errors_by_type"] == {"schema_validation": 1}
+    assert metrics["attempt_errors_by_type"] == {"timeout": 1, "schema_validation": 1}
     assert all(row["latency_ms"] >= 0 for row in report["cases"])
 
 
@@ -237,3 +239,165 @@ def test_cli_rejects_invalid_case_selection_before_reading_key(monkeypatch, ids)
     monkeypatch.setattr(cli.config, "groq_api_key", lambda: pytest.fail("Read live key"))
     with pytest.raises(SystemExit, match="2"):
         cli.main(["live", "--allow-live", "--case-ids", *ids])
+
+
+async def test_source_coverage_and_recall_distinguish_empty_valid_and_invalid_citations():
+    dataset, _ = cli.load_dataset()
+    case = dataset.cases[0]
+    document, = case.relevant_documents
+    first = RunbookChunk(f"{document}#signals:1", document, "", "", "")
+    second = RunbookChunk(f"{document}#signals:2", document, "", "", "")
+    lookup = lambda *_: [first, second]
+    analyze = AsyncMock(side_effect=[
+        valid_analysis(),
+        valid_analysis(sources=[first.source_id, second.source_id]),
+        valid_analysis(sources=[f"{document}#fabricated:1"]),
+    ])
+
+    report = await runner.evaluate_analysis([case] * 3, analyze, lookup)
+    metrics = report["metrics"]
+
+    assert [row["citations_valid"] for row in report["cases"]] == [True, True, False]
+    assert metrics["source_coverage_rate"] == pytest.approx(2 / 3)
+    assert metrics["citation_checked_count"] == 2
+    assert metrics["citation_validity_rate"] == 0.5
+    assert metrics["relevant_source_sample_count"] == 3
+    assert metrics["relevant_source_recall"] == pytest.approx(1 / 3)
+
+
+async def test_rescore_legacy_reports_uses_intersection_and_preserves_failures(monkeypatch, tmp_path):
+    dataset, digest = cli.load_dataset()
+    cases = [dataset.cases[0], dataset.cases[3], dataset.cases[24]]
+    first, second, unknown = cases
+    before = await runner.evaluate_analysis(cases, AsyncMock(side_effect=[
+        valid_analysis(first.expected_severity),
+        valid_analysis(second.expected_severity),
+        AnalysisError(Failure.REQUEST_FAILED),
+    ]))
+    after = await runner.evaluate_analysis(cases[::-1], AsyncMock(side_effect=[
+        AnalysisError(Failure.REQUEST_FAILED),
+        AnalysisError(Failure.REQUEST_FAILED),
+        valid_analysis("low"),
+    ]))
+    for arm in (before, after):
+        for row in arm["cases"]:
+            row.pop("retrieved_source_ids")
+            row.pop("attempt_error_details")
+            if row["error"] == "unknown":
+                row["error"] = "request_failed"
+                row["attempt_errors"] = ["request_failed"]
+            row.pop("expected_documents")
+            row["schema_valid"] = not row["error"]
+
+    source = tmp_path / "live.json"
+    original = json.dumps({
+        "mode": "live", "generated_at_utc": "original", "dataset_version": dataset.version,
+        "sample_count": len(cases), "settings": {"dataset_sha256": digest},
+        "results": {"without_rag": before, "with_rag": after},
+    })
+    source.write_text(original)
+    monkeypatch.setattr(cli.config, "groq_api_key", lambda: pytest.fail("Read live key"))
+    monkeypatch.setattr(cli.llm, "create_groq_client", lambda *_: pytest.fail("Created client"))
+    monkeypatch.setattr(cli.retrieval, "retrieve", lambda *_: pytest.fail("Ran retrieval"))
+
+    cli.main(["rescore", "--saved-report", str(source)])
+
+    assert source.read_text() == original
+    report = json.loads((tmp_path / "live-rescored.json").read_text())
+    assert report["generated_at_utc"] == "original"
+    results = report["results"]
+    assert results["paired"]["case_ids"] == [first.id]
+    assert results["with_minus_without"]["severity_accuracy"] == -1
+    assert results["without_rag"]["metrics"]["severity_accuracy"] == 1
+    assert results["without_rag"]["metrics"]["success_rate"] == pytest.approx(2 / 3)
+    metrics = results["with_rag"]["metrics"]
+    assert metrics["severity_incorrect_count"] == 1
+    assert metrics["schema_invalid_count"] == 0
+    assert metrics["schema_unassessed_count"] == 2
+    assert metrics["schema_valid_rate"] == 1
+    assert metrics["citation_validity_rate"] is None
+    assert metrics["uncertainty_expected_count"] == 1
+    assert metrics["uncertainty_rate"] is None
+    assert results["with_rag"]["cases"][0]["id"] == unknown.id
+    assert results["with_rag"]["cases"][0]["error"] == "request_failed"
+    assert results["with_rag"]["cases"][-1]["expected_documents"] == first.relevant_documents
+    assert "request_failed" in (tmp_path / "live-rescored.md").read_text()
+
+
+def test_empty_comparison_has_no_accuracy_or_delta():
+    report = runner.comparison_report([], [])
+
+    assert report["paired"]["case_ids"] == []
+    assert report["with_minus_without"]["severity_accuracy"] is None
+    assert report["without_rag"]["metrics"]["success_rate"] is None
+    assert report["without_rag"]["metrics"]["schema_valid_rate"] is None
+
+
+@pytest.mark.parametrize(
+    "case_id,severity,cause,hypothesis",
+    [
+        ("INC-001", "high", "db_pool", "Database clients are all checked out."),
+        ("INC-004", "critical", "http_503", "The gateway reports zero eligible backends."),
+        ("INC-014", "low", "kafka_lag", "Partition 4 has a backlog."),
+    ],
+)
+def test_pilot_labels_and_cause_paraphrases(case_id, severity, cause, hypothesis):
+    dataset, _ = cli.load_dataset()
+    case = next(case for case in dataset.cases if case.id == case_id)
+
+    assert (case.expected_severity, case.expected_cause) == (severity, cause)
+    assert cause_category([hypothesis]) == cause
+
+
+@pytest.mark.parametrize(
+    "failure,category,status,schema_valid",
+    [
+        (429, "http_429", 429, None),
+        (400, "http_4xx", 400, None),
+        (401, "http_4xx", 401, None),
+        (503, "http_5xx", 503, None),
+        ("timeout", "timeout", None, None),
+        ("connection", "connection", None, None),
+        ("schema", "schema_validation", None, False),
+        ("truncated", "invalid_response", None, None),
+        ("unknown", "unknown", None, None),
+    ],
+)
+async def test_evaluation_records_safe_provider_error_details(
+    failure, category, status, schema_valid, groq_client_factory
+):
+    import httpx
+
+    secret = "synthetic-sensitive-marker"
+
+    def handler(request):
+        if failure == "timeout":
+            raise httpx.ReadTimeout(secret, request=request)
+        if failure == "connection":
+            raise httpx.ConnectError(secret, request=request)
+        if isinstance(failure, int):
+            return httpx.Response(failure, json={"error": {"message": secret}})
+        return httpx.Response(200, json={"choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": json.dumps({"severity": secret})},
+            "finish_reason": "length" if failure == "truncated" else "stop",
+        }]})
+
+    dataset, _ = cli.load_dataset()
+    async with groq_client_factory(handler, api_key=secret, max_retries=0) as client:
+        async def analyze(incident, evidence):
+            if failure == "unknown":
+                raise RuntimeError(secret)
+            return await cli.llm.analyze_with_groq(incident, client, "synthetic-model", evidence)
+
+        report = await runner.evaluate_analysis(dataset.cases[:1], analyze)
+
+    row, = report["cases"]
+    assert row["schema_valid"] is schema_valid
+    assert row["error"] == category
+    assert row["attempt_error_details"] == [
+        {"attempt": 1, "category": category, "http_status": status}
+    ]
+    assert report["metrics"]["errors_by_type"] == {category: 1}
+    assert report["metrics"]["severity_accuracy"] is None
+    assert secret not in json.dumps(report)

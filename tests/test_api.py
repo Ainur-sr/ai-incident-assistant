@@ -97,7 +97,7 @@ async def test_invalid_rag_setting_keeps_health_available(client, monkeypatch, e
     assert response.json() == {"detail": "RAG is misconfigured."}
 
 
-async def test_rag_unavailable_returns_sanitized_error(client, monkeypatch):
+async def test_rag_unavailable_returns_sanitized_error(client, monkeypatch, inline_retrieval):
     from app import retrieval
 
     def unavailable():

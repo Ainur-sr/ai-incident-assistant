@@ -108,7 +108,11 @@ model and independently validates the returned JSON before releasing the result.
 
 FastAPI exposes the HTTP API and Uvicorn runs the local server. Pytest and AnyIO
 run the offline tests. HTTPX sends requests directly to the ASGI app and mocks
-Groq's HTTP transport in integration tests. Retrieval tests use deterministic
+Groq's HTTP transport in integration tests. API tests using retrieval doubles run those
+doubles inline at the thread-pool boundary. Mock Groq clients also use a fixed
+OS header to skip background platform detection. This keeps the ASGI tests
+independent of cross-thread socket wakeups in restricted environments.
+Retrieval tests use deterministic
 NumPy embeddings, so the suite requires neither model weights nor network access.
 
 ## Tests
@@ -140,7 +144,8 @@ python -m evals mock
 
 Retrieval reports document-level Recall@1, Recall@3, Precision@3, MRR and
 negative-case false positives. Analysis reports severity accuracy and macro-F1,
-leading-cause category accuracy, schema validity, latency, errors, uncertainty
+leading-cause category accuracy on successful responses, overall success rate,
+schema validity, latency, errors, uncertainty
 and citation validity. The mock run checks the pipeline and measures the local
 baseline. It makes no claim about model quality. Both modes run without Groq.
 
@@ -159,6 +164,10 @@ sequential, start at least three seconds apart by default, and pause for at
 least 60 seconds on rate limits or longer if a numeric `Retry-After` header
 requests it. Increase the interval to fit your quota. Timeouts and temporary
 unavailability are retried with bounded exponential backoff.
+
+Rescore a saved comparison offline with
+`python -m evals rescore --saved-report evals/results/live.json`.
+The paired comparison uses incident IDs that succeeded in both arms.
 
 Each command writes JSON and Markdown under the Git-ignored `evals/results/`
 directory, replacing only the previous reports for the selected mode. Reports

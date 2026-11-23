@@ -6,7 +6,7 @@ from time import perf_counter
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app.llm import AnalysisError, Failure
+from app.llm import AnalysisError, ErrorCategory, Failure
 from app.models import IncidentAnalysis, IncidentRequest, Severity
 from app.retrieval import RunbookChunk
 from evals.metrics import CAUSE_PATTERNS, cause_category, ratio, retrieval_metrics, severity_metrics
@@ -86,8 +86,10 @@ async def evaluate_case(
     evidence = None
     result = None
     error = None
+    schema_valid = None
     attempts = 0
     attempt_errors = []
+    attempt_error_details = []
     if retrieve is not None:
         try:
             evidence = retrieve(case.description, case.logs, top_k)
@@ -97,22 +99,32 @@ async def evaluate_case(
     if error is None:
         for attempt in range(retries + 1):
             attempts += 1
+            retryable = False
+            http_status = None
             try:
                 raw = await analyze(case.incident(), evidence)
                 result = IncidentAnalysis.model_validate(raw, strict=True)
-                error = None
             except ValidationError:
-                error = "invalid_response"
-                attempt_errors.append(error)
-                break
+                schema_valid = False
+                error = ErrorCategory.SCHEMA_VALIDATION.value
             except AnalysisError as exc:
-                error = exc.failure.name.lower()
-                attempt_errors.append(error)
-                if exc.failure not in RETRYABLE:
-                    break
-            if result is not None:
+                error = exc.category.value
+                http_status = exc.http_status
+                retryable = exc.failure in RETRYABLE
+                if exc.category is ErrorCategory.SCHEMA_VALIDATION:
+                    schema_valid = False
+            except Exception:
+                error = ErrorCategory.UNKNOWN.value
+            else:
+                schema_valid = True
+                error = None
                 break
-            if attempt < retries and error != "rate_limit":
+
+            attempt_errors.append(error)
+            attempt_error_details.append({"attempt": attempts, "category": error, "http_status": http_status})
+            if not retryable:
+                break
+            if attempt < retries and error != ErrorCategory.HTTP_429:
                 await sleep(2 ** attempt)
 
     predicted_cause = cause_category(result.likely_causes) if result else None
@@ -123,14 +135,19 @@ async def evaluate_case(
         "predicted_severity": result.severity if result else None,
         "expected_cause": case.expected_cause,
         "predicted_cause": predicted_cause,
-        "schema_valid": result is not None,
+        "schema_valid": schema_valid,
         "error": error,
         "attempts": attempts,
         "latency_ms": (perf_counter() - end_to_end_start) * 1000,
         "attempt_errors": attempt_errors,
+        "attempt_error_details": attempt_error_details,
         "uncertainty_expected": uncertainty_expected,
         "uncertainty_present": bool(result and result.needs_human_review and result.limitations),
         "sources": result.sources if result else [],
+        "expected_documents": case.relevant_documents,
+        "retrieved_source_ids": (
+            [chunk.source_id for chunk in evidence or []] if error != "retrieval_unavailable" else None
+        ),
         "citations_valid": (
             set(result.sources) <= {chunk.source_id for chunk in evidence or []}
             if result else None
@@ -138,35 +155,103 @@ async def evaluate_case(
     }
 
 
+def successful(row: dict) -> bool:
+    return row["error"] is None and row["schema_valid"] is True
+
+
 def analysis_report(rows: list[dict]) -> dict:
     count = len(rows)
-    valid = sum(row["schema_valid"] for row in rows)
-    uncertain = [row for row in rows if row["uncertainty_expected"]]
+    successes = [row for row in rows if successful(row)]
+    failures = [row for row in rows if not successful(row)]
+    valid = sum(row["schema_valid"] is True for row in rows)
+    invalid = sum(row["schema_valid"] is False for row in rows)
+    uncertain = [row for row in successes if row["uncertainty_expected"]]
+    citing = [row for row in successes if row["sources"]]
+    checked_citations = [row for row in citing if row["citations_valid"] is not None]
+    coverage = []
+    for row in successes:
+        expected = set(row.get("expected_documents") or [])
+        if not expected:
+            continue
+        sources = set(row["sources"])
+        retrieved_ids = row.get("retrieved_source_ids")
+        if retrieved_ids is not None:
+            sources.intersection_update(retrieved_ids)
+        elif sources and row["citations_valid"] is not True:
+            # Historical rows have only a verdict for the complete citation list.
+            continue
+        cited_documents = {source.split("#", 1)[0] for source in sources}
+        coverage.append(len(expected & cited_documents) / len(expected))
     latency = [row["latency_ms"] for row in rows]
     return {
         "metrics": {
             "sample_count": count,
+            "success_count": len(successes),
+            "success_rate": ratio(len(successes), count),
+            "severity_incorrect_count": sum(
+                row["expected_severity"] != row["predicted_severity"] for row in successes
+            ),
             **severity_metrics([
-                (row["expected_severity"], row["predicted_severity"]) for row in rows
+                (row["expected_severity"], row["predicted_severity"]) for row in successes
             ]),
+            "cause_incorrect_count": sum(
+                row["expected_cause"] != row["predicted_cause"] for row in successes
+            ),
             "cause_accuracy": ratio(sum(
-                row["expected_cause"] == row["predicted_cause"] for row in rows
-            ), count),
+                row["expected_cause"] == row["predicted_cause"] for row in successes
+            ), len(successes)),
             "schema_valid_count": valid,
-            "schema_valid_rate": ratio(valid, count),
-            "error_count": count - valid,
-            "errors_by_type": dict(Counter(row["error"] for row in rows if row["error"])),
+            "schema_invalid_count": invalid,
+            "schema_unassessed_count": count - valid - invalid,
+            "schema_valid_rate": ratio(valid, valid + invalid),
+            "error_count": len(failures),
+            "errors_by_type": dict(Counter(row["error"] for row in failures)),
             "attempt_errors_by_type": dict(Counter(
                 error for row in rows for error in row["attempt_errors"]
             )),
             "analysis_attempts": sum(row["attempts"] for row in rows),
+            "uncertainty_expected_count": sum(row["uncertainty_expected"] for row in rows),
             "uncertainty_sample_count": len(uncertain),
             "uncertainty_rate": ratio(sum(row["uncertainty_present"] for row in uncertain), len(uncertain)),
-            "citation_validity_rate": ratio(sum(row["citations_valid"] is True for row in rows), valid),
+            "responses_with_sources": len(citing),
+            "source_coverage_rate": ratio(len(citing), len(successes)),
+            "citation_checked_count": len(checked_citations),
+            "citation_validity_rate": ratio(
+                sum(row["citations_valid"] is True for row in checked_citations), len(checked_citations)
+            ),
+            "relevant_source_sample_count": len(coverage),
+            "relevant_source_recall": mean(coverage) if coverage else None,
             "latency_mean_ms": mean(latency) if latency else None,
             "latency_median_ms": median(latency) if latency else None,
         },
         "cases": rows,
+    }
+
+
+def comparison_report(without_rag: list[dict], with_rag: list[dict]) -> dict:
+    baseline = analysis_report(without_rag)
+    treatment = analysis_report(with_rag)
+    treatment_by_id = {row["id"]: row for row in with_rag if successful(row)}
+    paired_without = [row for row in without_rag if successful(row) and row["id"] in treatment_by_id]
+    paired_with = [treatment_by_id[row["id"]] for row in paired_without]
+    paired_baseline = analysis_report(paired_without)
+    paired_treatment = analysis_report(paired_with)
+
+    differences = {}
+    for metric in ("severity_accuracy", "severity_macro_f1", "cause_accuracy",
+                   "latency_mean_ms", "latency_median_ms"):
+        before, after = paired_baseline["metrics"][metric], paired_treatment["metrics"][metric]
+        differences[metric] = after - before if before is not None and after is not None else None
+    return {
+        "without_rag": baseline,
+        "with_rag": treatment,
+        "paired": {
+            "case_ids": [row["id"] for row in paired_without],
+            "without_rag": paired_baseline["metrics"],
+            "with_rag": paired_treatment["metrics"],
+            "with_minus_without": differences,
+        },
+        "with_minus_without": differences,
     }
 
 
@@ -192,10 +277,4 @@ async def compare_rag(
         for name, lookup in treatments[::(-1 if i % 2 else 1)]:
             arms[name].append(await evaluate_case(case, analyze, lookup, top_k, retries))
 
-    baseline = analysis_report(arms["without_rag"])
-    treatment = analysis_report(arms["with_rag"])
-    differences = {}
-    for metric in ("severity_accuracy", "severity_macro_f1", "cause_accuracy", "latency_mean_ms", "latency_median_ms"):
-        before, after = baseline["metrics"][metric], treatment["metrics"][metric]
-        differences[metric] = after - before if before is not None and after is not None else None
-    return {"without_rag": baseline, "with_rag": treatment, "with_minus_without": differences}
+    return comparison_report(arms["without_rag"], arms["with_rag"])
