@@ -1,0 +1,9 @@
+**
+!requirements.txt
+!requirements-rag.txt
+!app/
+app/**
+!app/*.py
+!runbooks/
+runbooks/**
+!runbooks/*.md

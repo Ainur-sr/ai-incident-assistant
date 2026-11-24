@@ -2,6 +2,40 @@
 
 A local FastAPI service for triaging synthetic software incidents. It runs offline by default and can use GroqCloud for analysis when explicitly enabled.
 
+## Run with Docker
+
+With Docker and the Compose plugin installed, build and start the Python 3.14
+service in its default mock mode with RAG disabled:
+
+```bash
+docker compose --env-file /dev/null up --build --wait
+curl --fail http://127.0.0.1:8000/health
+```
+
+The API listens on local port 8000 and Compose waits for the container's
+`GET /health` check. The commands use `--env-file /dev/null` on Linux or WSL
+to skip automatic loading of the project's `.env` file. Compose still uses
+exported shell variables. After trying the API examples below, stop the service
+with `docker compose --env-file /dev/null down`.
+
+To use GroqCloud in Docker, enter and export `GROQ_API_KEY` as shown in
+[Enable GroqCloud](#enable-groqcloud), then run
+`ANALYSIS_MODE=groq docker compose --env-file /dev/null up --build --wait`.
+Compose passes the key at runtime and accepts the optional `GROQ_MODEL` override.
+
+To use local RAG in Docker, build with the optional CPU dependencies, cache the
+public model in the Compose volume, and enable retrieval:
+
+```bash
+INSTALL_RAG=true docker compose --env-file /dev/null build
+INSTALL_RAG=true docker compose --env-file /dev/null run --rm api python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu", token=False)'
+INSTALL_RAG=true RAG_ENABLED=true docker compose --env-file /dev/null up --wait
+```
+
+The one-time model download needs internet access. The cache volume survives
+`docker compose down`. Export `RAG_TOP_K` to override the default of three
+chunks. For GroqCloud with RAG, also set `ANALYSIS_MODE=groq` and export the key.
+
 ## Setup and run
 
 Use Python 3.14 for the documented setup. If the repository already has a compatible `.venv`, reuse it and skip the first command.
@@ -120,6 +154,14 @@ NumPy embeddings, so the suite requires neither model weights nor network access
 ```bash
 python -m pytest
 ```
+
+GitHub Actions runs CI on pushes and pull requests. It installs the development
+dependencies on Python 3.14, runs the offline pytest suite, validates Compose,
+and builds and starts the default image to check `GET /health`. CI uses mock
+mode with RAG disabled and requires internet access only for dependencies,
+actions, and the base image. To reproduce the Docker checks locally, run
+`docker compose --env-file /dev/null config --quiet` and the default Docker
+commands above.
 
 For an optional manual integration check, enable Groq mode and run the
 synthetic `/analyze` curl example above. Expect HTTP 200 with the structured

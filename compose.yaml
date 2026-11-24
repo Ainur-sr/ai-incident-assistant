@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: .
+      args:
+        INSTALL_RAG: "${INSTALL_RAG:-false}"
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      ANALYSIS_MODE: "${ANALYSIS_MODE:-mock}"
+      GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      GROQ_MODEL: "${GROQ_MODEL:-openai/gpt-oss-20b}"
+      RAG_ENABLED: "${RAG_ENABLED:-false}"
+      RAG_TOP_K: "${RAG_TOP_K:-3}"
+    volumes:
+      - huggingface-cache:/home/app/.cache/huggingface
+
+volumes:
+  huggingface-cache:
