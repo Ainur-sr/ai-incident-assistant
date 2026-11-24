@@ -77,11 +77,14 @@ and the individual document rankings.
   represented by verified chunks. Empty lists score zero on positive cases.
   For legacy rows, recall uses the saved citation verdict. A legacy nonempty
   list without a passing verdict is omitted because individual chunk membership
-  is unknown. The live adapter attaches retrieved IDs itself, so these measures
-  describe attribution and document coverage. Grounding requires manual review.
+  is unknown. Historical runs attached retrieved IDs automatically. Current
+  runs use the union of valid IDs explicitly cited per hypothesis.
 - Latency uses a monotonic wall clock and covers retrieval, analysis requests,
   pacing, retries and retry delays. It includes failures. Live mode builds the
-  index before timing begins.
+  index before timing begins. Current live reports separately record time
+  awaiting the provider SDK across attempts, pacing (including the rate-limit
+  cooldown), retry backoff, and total analysis time excluding pacing. SDK time
+  includes network and SDK processing. Historical rows only have wall time.
 - Live mode pairs the same selected cases with and without RAG using one model and
   the same provider sampling settings and strict schema. It alternates arm
   order and reports RAG minus baseline deltas on cases that succeeded in both
@@ -96,7 +99,8 @@ New analysis rows record terminal categories in `error`. The
 that recovered on retry. It contains the one-based attempt number, category,
 and upstream HTTP status when available. Categories include `http_429`,
 `http_4xx` (excluding 429), `http_5xx`, `timeout`, `connection`,
-`schema_validation`, `invalid_response`, and `unknown`. A retrieval failure
+`schema_validation`, `invalid_response`, `provider_generation`,
+`request_configuration`, and `unknown`. A retrieval failure
 before a provider call is `retrieval_unavailable` and has zero attempts.
 The evaluator records only controlled categories and numeric metadata.
 Exception messages, headers, bodies, and validation inputs are excluded.
@@ -105,11 +109,12 @@ Historic error codes survive rescoring as recorded.
 ### Offline report rescoring
 
 ```bash
-python -m evals rescore --saved-report evals/results/live.json
+python -m evals rescore --saved-report evals/benchmarks/v1/live.json
 ```
 
-The command writes `live-rescored.json` and `live-rescored.md` next to the
-original, leaving the original intact. It also supports saved `mock` and
+The command writes `live-rescored.json` and `live-rescored.md` under
+`evals/results/` by default. Pass `--output-dir` to choose another destination.
+It also supports saved `mock` and
 `retrieval` reports. It uses saved case outcomes without provider calls or
 retrieval. For older analysis reports, it restores expected document labels
 only if the local dataset matches the saved SHA-256. It preserves run
@@ -232,3 +237,83 @@ reliably, or give credit for a later correct hypothesis. Runbook IDs indicate
 supplied evidence, and manual review is needed to determine which claims it
 actually supports. The paired set excludes eight cases with failures, so
 paired and all-successful scores describe different populations.
+
+## Reproduce or extend the benchmark
+
+The [published benchmark](benchmarks/v1/README.md) contains the original
+30-case live and retrieval reports. Use a fresh directory for each experiment.
+Live and retrieval modes refuse to overwrite an existing report.
+
+Install the optional dependencies and cache the public CPU embedding model once:
+
+```bash
+python -m pip install --no-deps -c requirements-rag-lock.txt torch --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -c requirements-lock.txt -c requirements-rag-lock.txt -r requirements-rag.txt
+python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu", token=False)'
+```
+
+```bash
+HF_HUB_OFFLINE=1 python -m evals retrieval --output-dir evals/results/m6-retrieval
+python -m evals mock --output-dir evals/results/m6-mock
+
+# Explicit live opt-in with synthetic inputs only. This uses provider quota.
+read -rsp 'Groq API key: ' GROQ_API_KEY
+printf '\n'
+export GROQ_API_KEY
+GROQ_MODEL=openai/gpt-oss-20b HF_HUB_OFFLINE=1 python -m evals live \
+  --allow-live --request-interval 6 --retries 1 --capture-claims \
+  --output-dir evals/results/m6-full-ab
+unset GROQ_API_KEY
+```
+
+First compare the terminal generation error rate, retry attempts and recoveries,
+schema outcomes, and valid responses over all 30 scheduled cases per arm.
+Then compare severity and leading-cause scores on the paired intersection,
+on each arm's successes, and over all scheduled cases. Include the uncertainty
+denominator and distinguish the review-plus-limitations check from the actual
+unknown label match. The new prompt is an intervention alongside the schema and
+retry changes, so a single rerun cannot isolate their effects.
+
+### Claim-level groundedness protocol
+
+Use the versioned inputs, hashed runbooks, and the optional local
+`--capture-claims` report. This flag records free-form generated hypothesis text
+for synthetic cases. Review that text for sensitive content before sharing any
+derived artifact. Historical reports lack the hypothesis text and cannot be
+scored with this protocol.
+
+1. Review every successful RAG-arm hypothesis, including uncited hypotheses,
+   for the fixed set INC-001, INC-023, and INC-025 through INC-030. Record missing
+   responses separately. Use the saved incident ID, hypothesis ordinal, and
+   exact cited chunk IDs so another reviewer can reproduce the comparison.
+2. For each hypothesis and chunk pair, check whether the ID was in the actual
+   `retrieved_source_ids` for that case. Then label the pair `supports`,
+   `related_only`, or `contradicts` from the chunk text. `supports` requires
+   that the chunk explicitly connects an observed symptom or fact to the
+   proposed explanation. Resolve chunk text using `load_chunks` and the
+   recorded runbook hashes.
+3. Separately label the hypothesis `consistent`, `insufficient`, or
+   `contradicted` against the incident observations, including negations and
+   quoted text. Assess uncited claims in this step. An incident outside the
+   corpus can legitimately support an uncited explanation.
+4. Report valid ID pairs over all cited pairs, supporting pairs over reviewed
+   valid pairs, and claims with at least one supporting chunk over all
+   hypotheses reviewed. Also report unsupported or contradicted claims over
+   all reviewed hypotheses and abstentions over delivered cases with an
+   unknown cause label. Record numerator and denominator for each metric.
+   Have a second reviewer label independently on the same rows and record
+   disagreements before adjudicating.
+
+Calibration examples for reviewers:
+
+| Case | Hypothesis and source | Expected review |
+| --- | --- | --- |
+| INC-001 | A saturated database connection pool may explain the acquire timeouts. `db-pool-exhaustion.md#signals:1` | Supports if supplied. The incident independently reports pool saturation and acquire timeouts. |
+| INC-030 | Transport timeouts interrupted production requests. `network-timeouts.md#signals:1` | A matching source ID can be valid membership. The quoted symptom is insufficient support and successful requests contradict the claim. |
+| INC-027 | An expired signing certificate may explain failed sign-ins. No source. | Incident-consistent and uncited. The runbook corpus has no certificate guidance. |
+
+Cases INC-025 and INC-026 exercise abstention for a vague complaint and a badge
+design request. INC-027 through INC-029 contain real synthetic observations
+outside the corpus, including signing, permission, and localization issues.
+INC-030 measures resistance to sample error labels. Dataset labels were kept
+unchanged.

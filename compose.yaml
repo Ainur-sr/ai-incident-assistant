@@ -12,6 +12,7 @@ services:
       GROQ_MODEL: "${GROQ_MODEL:-openai/gpt-oss-20b}"
       RAG_ENABLED: "${RAG_ENABLED:-false}"
       RAG_TOP_K: "${RAG_TOP_K:-3}"
+      HF_HUB_OFFLINE: "${HF_HUB_OFFLINE:-1}"
     volumes:
       - huggingface-cache:/home/app/.cache/huggingface
 

@@ -43,9 +43,8 @@ async def test_groq_mode_returns_validated_analysis(api, monkeypatch, configured
     analysis = {
         "severity": "medium",
         "summary": "Synthetic checkout experienced timeouts.",
-        "likely_causes": ["An upstream service may be slow."],
+        "hypotheses": [{"claim": "An upstream service may be slow.", "source_ids": []}],
         "recommended_actions": ["Inspect the upstream latency metrics."],
-        "sources": [],
         "needs_human_review": True,
         "limitations": ["The upstream trace is missing."],
     }
@@ -76,7 +75,11 @@ async def test_groq_mode_returns_validated_analysis(api, monkeypatch, configured
     mock_groq_transport(monkeypatch, handler, groq_client_factory)
     response = await api.post("/analyze", json=INCIDENT)
     assert response.status_code == 200
-    assert response.json() == analysis
+    assert response.json() == {
+        **{key: value for key, value in analysis.items() if key != "hypotheses"},
+        "likely_causes": [item["claim"] for item in analysis["hypotheses"]],
+        "hypothesis_evidence": analysis["hypotheses"], "sources": [], "retrieved_sources": [],
+    }
 
 
 @pytest.mark.parametrize(
@@ -122,6 +125,55 @@ async def test_health_and_validation_work_without_key(api, monkeypatch, key):
     assert response.json() == {"detail": "The analysis provider is not configured."}
 
 
+@pytest.mark.parametrize(
+    "code,recover,calls,status",
+    [("json_validate_failed", True, 2, 200), ("json_validate_failed", False, 2, 502),
+     ("invalid_json_schema", False, 1, 502), ("invalid_request_error", False, 1, 502)],
+)
+async def test_only_identified_generation_errors_retry(
+    api, monkeypatch, groq_client_factory, code, recover, calls, status
+):
+    requests = []
+
+    def handler(request):
+        requests.append(request.content)
+        if not recover or len(requests) == 1:
+            return httpx.Response(400, json={"error": {
+                "type": "invalid_request_error", "code": code, "failed_generation": "private-marker",
+            }})
+        return httpx.Response(200, json={"choices": [{
+            "index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": json.dumps({
+                "severity": "unknown", "summary": "Impact is unclear.", "hypotheses": [],
+                "recommended_actions": ["Check impact."], "needs_human_review": False, "limitations": [],
+            })},
+        }]})
+
+    mock_groq_transport(monkeypatch, handler, groq_client_factory)
+    response = await api.post("/analyze", json=INCIDENT)
+    assert response.status_code == status
+    assert len(requests) == calls and len(set(requests)) == 1
+    assert "private-marker" not in response.text
+    if recover:
+        assert response.json()["needs_human_review"] is True
+
+
+async def test_groq_lifespan_reuses_and_closes_client(api, monkeypatch, groq_client_factory):
+    instances = []
+
+    def factory(**kwargs):
+        client = groq_client_factory(lambda _: httpx.Response(503), **kwargs)
+        instances.append(client)
+        return client
+
+    monkeypatch.setattr(llm, "AsyncGroq", factory)
+    async with app.router.lifespan_context(app):
+        assert (await api.post("/analyze", json=INCIDENT)).status_code == 503
+        assert (await api.post("/analyze", json=INCIDENT)).status_code == 503
+        client, = instances
+        assert not client.is_closed()
+    assert client.is_closed()
+
+
 @pytest.mark.parametrize("has_match", [True, False])
 async def test_rag_passes_retrieved_chunks_and_uses_server_attribution(api, monkeypatch, has_match, inline_retrieval, groq_client_factory):
     import numpy as np
@@ -140,14 +192,17 @@ async def test_rag_passes_retrieved_chunks_and_uses_server_attribution(api, monk
     index = retrieval.RunbookIndex(retrieval.load_chunks(retrieval.RUNBOOK_DIR), FakeEmbedder())
     monkeypatch.setattr(retrieval, "_load_index", lambda: index)
     monkeypatch.setenv("RAG_ENABLED", "true")
-    monkeypatch.setenv("RAG_TOP_K", "1")
+    monkeypatch.setenv("RAG_TOP_K", "2")
     sent = []
     analysis = {
         "severity": "unknown",
         "summary": "Synthetic checkout timed out.",
-        "likely_causes": [],
+        "hypotheses": [
+            {"claim": "A transport problem may be contributing.",
+             "source_ids": ["network-timeouts.md#signals:1", "fabricated.md#diagnostics:1"]},
+            {"claim": "A slow dependency may be contributing.", "source_ids": []},
+        ],
         "recommended_actions": ["Inspect the request traces."],
-        "sources": ["fabricated.md#diagnostics:1"],
         "needs_human_review": True,
         "limitations": ["Impact is unclear."],
     }
@@ -180,13 +235,22 @@ async def test_rag_passes_retrieved_chunks_and_uses_server_attribution(api, monk
     evidence = user_content.pop("runbook_evidence")
     assert user_content == INCIDENT
     if has_match:
-        chunk, = evidence
+        chunk, unused_chunk = evidence
         assert chunk["source_id"] == "network-timeouts.md#signals:1"
+        assert unused_chunk["source_id"] == "network-timeouts.md#diagnostics:1"
         assert chunk["section"] == "Signals"
         assert "TLS handshake timeout" in chunk["text"]
-        analysis["sources"] = [chunk["source_id"]]
     else:
         assert evidence == []
-        analysis["sources"] = []
-        analysis["limitations"].append("No relevant runbook evidence was found.")
-    assert response.json() == analysis
+    result = response.json()
+    retrieved = ["network-timeouts.md#signals:1"] if has_match else []
+    assert result["retrieved_sources"] == [chunk["source_id"] for chunk in evidence]
+    assert result["sources"] == retrieved
+    assert result["likely_causes"] == [item["claim"] for item in analysis["hypotheses"]]
+    assert result["hypothesis_evidence"] == [
+        {"claim": analysis["hypotheses"][0]["claim"], "source_ids": retrieved},
+        analysis["hypotheses"][1],
+    ]
+    assert "fabricated.md" not in response.text
+    assert "One or more unsupported source references were removed." in result["limitations"]
+    assert ("No relevant runbook evidence was found." in result["limitations"]) is not has_match

@@ -1,0 +1,341 @@
+{
+  "mode": "retrieval",
+  "generated_at_utc": "2026-11-22T05:36:32.511776+00:00",
+  "dataset_version": "1.0.0",
+  "sample_count": 30,
+  "settings": {
+    "dataset_sha256": "794dd911f3340c8896b9c22d37a2fe85b69bc4af023c60e907828cb9082e4a5b",
+    "packages": {
+      "numpy": "2.5.5",
+      "sentence-transformers": "5.7.0",
+      "torch": "2.15.0+cpu",
+      "groq": "1.7.0"
+    },
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "minimum_cosine_similarity": 0.3,
+    "runbook_sha256": {
+      "db-pool-exhaustion.md": "814d4a453f91e7c0108dd232cfca460ae822774140e8bc33bace670d9e8ed728",
+      "deployment-regression.md": "932f090dd63ac5cef985519e0a9616eeae1c8eaff7a66521342b1703ef756d9f",
+      "high-cpu.md": "f7ab4d58c15a29273f65178436e5b39fdcd615d5ca0a9f32f54a187a031e24d1",
+      "http-503.md": "0806f0ce6b5c4bd07191289502b10d46c0e2528ef40fb2c2cc1fb301511a34f4",
+      "kafka-consumer-lag.md": "30a81b6ddf7d06df52f0a979bd9572ce0bd8eb6b1a751751427f92af54fd5c6c",
+      "memory-leak-oom.md": "410e9a6c3937afb2781bdc4260e05e2851499812169622a0d7a460c69dd9acd8",
+      "network-timeouts.md": "bbaf9105f4c5737ce781f78f2316b0bbcb5bfe9491fae88d907ceffd58f1add0",
+      "slow-db-queries.md": "decb0ae9d6b2088505f15bc589facc5adb85c811ee3fe785e0cd05b74c9a3a98"
+    },
+    "chunk_limit": 16,
+    "rank_unit": "unique document"
+  },
+  "results": {
+    "metrics": {
+      "recall_at_1": 0.9166666666666666,
+      "recall_at_3": 1.0,
+      "precision_at_3": 0.3611111111111111,
+      "mrr": 0.9722222222222222,
+      "sample_count": 30,
+      "positive_count": 24,
+      "negative_count": 6,
+      "negative_false_positive_count_at_3": 1,
+      "negative_false_positive_rate_at_3": 0.16666666666666666
+    },
+    "cases": [
+      {
+        "id": "INC-001",
+        "expected_documents": [
+          "db-pool-exhaustion.md"
+        ],
+        "retrieved_documents": [
+          "db-pool-exhaustion.md",
+          "network-timeouts.md",
+          "slow-db-queries.md"
+        ]
+      },
+      {
+        "id": "INC-002",
+        "expected_documents": [
+          "db-pool-exhaustion.md"
+        ],
+        "retrieved_documents": [
+          "db-pool-exhaustion.md",
+          "network-timeouts.md",
+          "slow-db-queries.md",
+          "deployment-regression.md"
+        ]
+      },
+      {
+        "id": "INC-003",
+        "expected_documents": [
+          "db-pool-exhaustion.md",
+          "slow-db-queries.md"
+        ],
+        "retrieved_documents": [
+          "db-pool-exhaustion.md",
+          "slow-db-queries.md",
+          "network-timeouts.md",
+          "memory-leak-oom.md",
+          "high-cpu.md",
+          "http-503.md"
+        ]
+      },
+      {
+        "id": "INC-004",
+        "expected_documents": [
+          "http-503.md"
+        ],
+        "retrieved_documents": [
+          "http-503.md"
+        ]
+      },
+      {
+        "id": "INC-005",
+        "expected_documents": [
+          "http-503.md"
+        ],
+        "retrieved_documents": [
+          "http-503.md",
+          "network-timeouts.md",
+          "deployment-regression.md"
+        ]
+      },
+      {
+        "id": "INC-006",
+        "expected_documents": [
+          "http-503.md"
+        ],
+        "retrieved_documents": [
+          "http-503.md",
+          "high-cpu.md",
+          "network-timeouts.md"
+        ]
+      },
+      {
+        "id": "INC-007",
+        "expected_documents": [
+          "high-cpu.md"
+        ],
+        "retrieved_documents": [
+          "high-cpu.md",
+          "kafka-consumer-lag.md",
+          "memory-leak-oom.md",
+          "slow-db-queries.md",
+          "network-timeouts.md",
+          "deployment-regression.md"
+        ]
+      },
+      {
+        "id": "INC-008",
+        "expected_documents": [
+          "high-cpu.md"
+        ],
+        "retrieved_documents": [
+          "high-cpu.md"
+        ]
+      },
+      {
+        "id": "INC-009",
+        "expected_documents": [
+          "high-cpu.md"
+        ],
+        "retrieved_documents": [
+          "high-cpu.md",
+          "slow-db-queries.md",
+          "memory-leak-oom.md",
+          "db-pool-exhaustion.md"
+        ]
+      },
+      {
+        "id": "INC-010",
+        "expected_documents": [
+          "memory-leak-oom.md"
+        ],
+        "retrieved_documents": [
+          "memory-leak-oom.md"
+        ]
+      },
+      {
+        "id": "INC-011",
+        "expected_documents": [
+          "memory-leak-oom.md"
+        ],
+        "retrieved_documents": [
+          "memory-leak-oom.md",
+          "high-cpu.md"
+        ]
+      },
+      {
+        "id": "INC-012",
+        "expected_documents": [
+          "memory-leak-oom.md"
+        ],
+        "retrieved_documents": [
+          "memory-leak-oom.md"
+        ]
+      },
+      {
+        "id": "INC-013",
+        "expected_documents": [
+          "kafka-consumer-lag.md"
+        ],
+        "retrieved_documents": [
+          "kafka-consumer-lag.md",
+          "deployment-regression.md",
+          "slow-db-queries.md"
+        ]
+      },
+      {
+        "id": "INC-014",
+        "expected_documents": [
+          "kafka-consumer-lag.md"
+        ],
+        "retrieved_documents": [
+          "kafka-consumer-lag.md",
+          "slow-db-queries.md"
+        ]
+      },
+      {
+        "id": "INC-015",
+        "expected_documents": [
+          "kafka-consumer-lag.md"
+        ],
+        "retrieved_documents": [
+          "kafka-consumer-lag.md",
+          "slow-db-queries.md",
+          "high-cpu.md"
+        ]
+      },
+      {
+        "id": "INC-016",
+        "expected_documents": [
+          "network-timeouts.md"
+        ],
+        "retrieved_documents": [
+          "network-timeouts.md",
+          "http-503.md"
+        ]
+      },
+      {
+        "id": "INC-017",
+        "expected_documents": [
+          "network-timeouts.md"
+        ],
+        "retrieved_documents": [
+          "network-timeouts.md",
+          "http-503.md",
+          "deployment-regression.md"
+        ]
+      },
+      {
+        "id": "INC-018",
+        "expected_documents": [
+          "network-timeouts.md"
+        ],
+        "retrieved_documents": [
+          "network-timeouts.md"
+        ]
+      },
+      {
+        "id": "INC-019",
+        "expected_documents": [
+          "slow-db-queries.md"
+        ],
+        "retrieved_documents": [
+          "db-pool-exhaustion.md",
+          "network-timeouts.md",
+          "slow-db-queries.md"
+        ]
+      },
+      {
+        "id": "INC-020",
+        "expected_documents": [
+          "slow-db-queries.md"
+        ],
+        "retrieved_documents": [
+          "slow-db-queries.md"
+        ]
+      },
+      {
+        "id": "INC-021",
+        "expected_documents": [
+          "slow-db-queries.md"
+        ],
+        "retrieved_documents": [
+          "slow-db-queries.md",
+          "db-pool-exhaustion.md",
+          "deployment-regression.md"
+        ]
+      },
+      {
+        "id": "INC-022",
+        "expected_documents": [
+          "deployment-regression.md"
+        ],
+        "retrieved_documents": [
+          "deployment-regression.md",
+          "http-503.md"
+        ]
+      },
+      {
+        "id": "INC-023",
+        "expected_documents": [
+          "deployment-regression.md",
+          "http-503.md"
+        ],
+        "retrieved_documents": [
+          "http-503.md",
+          "deployment-regression.md",
+          "slow-db-queries.md"
+        ]
+      },
+      {
+        "id": "INC-024",
+        "expected_documents": [
+          "deployment-regression.md"
+        ],
+        "retrieved_documents": [
+          "deployment-regression.md",
+          "slow-db-queries.md",
+          "high-cpu.md"
+        ]
+      },
+      {
+        "id": "INC-025",
+        "expected_documents": [],
+        "retrieved_documents": []
+      },
+      {
+        "id": "INC-026",
+        "expected_documents": [],
+        "retrieved_documents": []
+      },
+      {
+        "id": "INC-027",
+        "expected_documents": [],
+        "retrieved_documents": []
+      },
+      {
+        "id": "INC-028",
+        "expected_documents": [],
+        "retrieved_documents": []
+      },
+      {
+        "id": "INC-029",
+        "expected_documents": [],
+        "retrieved_documents": []
+      },
+      {
+        "id": "INC-030",
+        "expected_documents": [],
+        "retrieved_documents": [
+          "http-503.md",
+          "high-cpu.md",
+          "network-timeouts.md",
+          "db-pool-exhaustion.md",
+          "memory-leak-oom.md",
+          "slow-db-queries.md",
+          "kafka-consumer-lag.md",
+          "deployment-regression.md"
+        ]
+      }
+    ]
+  }
+}

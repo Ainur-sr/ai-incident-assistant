@@ -13,15 +13,15 @@ def analyze_incident(incident: IncidentRequest) -> IncidentAnalysis:
     if TIMEOUT_SIGNAL.search(incident.description) or TIMEOUT_SIGNAL.search(incident.logs or ""):
         return IncidentAnalysis(
             severity="unknown",
-            summary="The incident text contains a timeout signal.",
-            likely_causes=["An upstream dependency may be slow or unreachable."],
+            summary="The incident text mentions a timeout.",
+            likely_causes=[],
             recommended_actions=[
                 "Check dependency latency and error rates around the incident time.",
                 "Inspect request traces for the operation associated with the timeout.",
             ],
             sources=[],
             needs_human_review=True,
-            limitations=[*limitations, "A timeout signal alone does not establish user impact."],
+            limitations=[*limitations, "A timeout mention alone does not establish a cause or user impact."],
         )
 
     return IncidentAnalysis(

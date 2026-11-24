@@ -1,0 +1,31 @@
+name: RAG Docker smoke
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  verify-rag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ANALYSIS_MODE: mock
+      GROQ_API_KEY: ""
+      INSTALL_RAG: "true"
+      RAG_ENABLED: "true"
+      HF_HUB_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build the RAG image and cache the public embedding model
+        run: |
+          docker compose build api
+          docker compose run --rm -e HF_HUB_OFFLINE=0 api python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu", token=False)'
+      - name: Exercise offline retrieval through the API
+        run: |
+          docker compose up --wait --wait-timeout 60
+          python3 scripts/smoke.py --rag
+      - name: Stop the Docker service
+        if: always()
+        run: docker compose down

@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
@@ -5,11 +7,28 @@ from fastapi.responses import JSONResponse
 
 from app import config
 from app.analysis import analyze_incident
-from app.llm import AnalysisError, Failure, analyze_with_groq, create_groq_client
+from app.llm import AnalysisError, Failure, analyze_with_generation_retry, create_groq_client
 from app.models import IncidentAnalysis, IncidentRequest
+from app.request_limits import AnalysisRequestLimits
 from app.retrieval import retrieve
 
-app = FastAPI(title="AI Incident Triage Assistant")
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    key = config.groq_api_key() if config.analysis_mode() == "groq" else None
+    if key is None:
+        yield
+        return
+    async with create_groq_client(key) as client:
+        application.state.groq_client = client
+        try:
+            yield
+        finally:
+            del application.state.groq_client
+
+
+app = FastAPI(title="AI Incident Triage Assistant", lifespan=lifespan)
+app.add_middleware(AnalysisRequestLimits)
 
 PROVIDER_ERROR_STATUS = {
     Failure.TIMEOUT: 504,
@@ -25,7 +44,8 @@ async def handle_validation_error(
     _request: Request, error: RequestValidationError
 ) -> JSONResponse:
     details = [
-        {"loc": issue["loc"], "msg": issue["msg"], "type": issue["type"]}
+        {"loc": ("body",) if issue["type"] == "extra_forbidden" else issue["loc"],
+         "msg": issue["msg"], "type": issue["type"]}
         for issue in error.errors()
     ]
     return JSONResponse(status_code=422, content={"detail": details})
@@ -37,7 +57,7 @@ async def health() -> dict[str, str]:
 
 
 @app.post("/analyze")
-async def analyze(incident: IncidentRequest) -> IncidentAnalysis:
+async def analyze(incident: IncidentRequest, request: Request) -> IncidentAnalysis:
     mode = config.analysis_mode()
     if mode not in {"mock", "groq"}:
         raise HTTPException(503, "Analysis mode is misconfigured.")
@@ -60,10 +80,14 @@ async def analyze(incident: IncidentRequest) -> IncidentAnalysis:
     try:
         if api_key is None:
             result = analyze_incident(incident)
-            result.sources = [chunk.source_id for chunk in evidence or []]
+            result.retrieved_sources = [chunk.source_id for chunk in evidence or []]
         else:
-            async with create_groq_client(api_key) as client:
-                result = await analyze_with_groq(incident, client, config.groq_model(), evidence)
+            client = getattr(request.app.state, "groq_client", None)
+            if client is None:
+                async with create_groq_client(api_key) as client:
+                    result = await analyze_with_generation_retry(incident, client, config.groq_model(), evidence)
+            else:
+                result = await analyze_with_generation_retry(incident, client, config.groq_model(), evidence)
     except AnalysisError as error:
         raise HTTPException(
             PROVIDER_ERROR_STATUS[error.failure], error.failure.value

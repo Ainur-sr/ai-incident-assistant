@@ -7,13 +7,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/home/app/.cache/huggingface
 
 WORKDIR /app
-COPY requirements.txt requirements-rag.txt ./
-RUN python -m pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-lock.txt ./
+RUN python -m pip install --no-cache-dir -c requirements-lock.txt -r requirements.txt
 
 ARG INSTALL_RAG=false
+COPY requirements-rag.txt requirements-rag-lock.txt ./
 RUN if [ "$INSTALL_RAG" = "true" ]; then \
-        python -m pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
-        python -m pip install --no-cache-dir -r requirements-rag.txt; \
+        python -m pip install --no-cache-dir --no-deps -c requirements-rag-lock.txt torch \
+            --index-url https://download.pytorch.org/whl/cpu && \
+        python -m pip install --no-cache-dir -c requirements-lock.txt -c requirements-rag-lock.txt \
+            -r requirements-rag.txt; \
     fi
 
 RUN useradd --create-home app && install -d -o app -g app "$HF_HOME"

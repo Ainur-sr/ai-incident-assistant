@@ -1,0 +1,1924 @@
+{
+  "mode": "live",
+  "generated_at_utc": "2026-11-23T06:45:35.439576+00:00",
+  "dataset_version": "1.0.0",
+  "sample_count": 30,
+  "settings": {
+    "dataset_sha256": "794dd911f3340c8896b9c22d37a2fe85b69bc4af023c60e907828cb9082e4a5b",
+    "case_ids": [
+      "INC-001",
+      "INC-002",
+      "INC-003",
+      "INC-004",
+      "INC-005",
+      "INC-006",
+      "INC-007",
+      "INC-008",
+      "INC-009",
+      "INC-010",
+      "INC-011",
+      "INC-012",
+      "INC-013",
+      "INC-014",
+      "INC-015",
+      "INC-016",
+      "INC-017",
+      "INC-018",
+      "INC-019",
+      "INC-020",
+      "INC-021",
+      "INC-022",
+      "INC-023",
+      "INC-024",
+      "INC-025",
+      "INC-026",
+      "INC-027",
+      "INC-028",
+      "INC-029",
+      "INC-030"
+    ],
+    "packages": {
+      "numpy": "2.5.5",
+      "sentence-transformers": "5.7.0",
+      "torch": "2.15.0+cpu",
+      "groq": "1.7.0"
+    },
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "minimum_cosine_similarity": 0.3,
+    "runbook_sha256": {
+      "db-pool-exhaustion.md": "814d4a453f91e7c0108dd232cfca460ae822774140e8bc33bace670d9e8ed728",
+      "deployment-regression.md": "932f090dd63ac5cef985519e0a9616eeae1c8eaff7a66521342b1703ef756d9f",
+      "high-cpu.md": "f7ab4d58c15a29273f65178436e5b39fdcd615d5ca0a9f32f54a187a031e24d1",
+      "http-503.md": "0806f0ce6b5c4bd07191289502b10d46c0e2528ef40fb2c2cc1fb301511a34f4",
+      "kafka-consumer-lag.md": "30a81b6ddf7d06df52f0a979bd9572ce0bd8eb6b1a751751427f92af54fd5c6c",
+      "memory-leak-oom.md": "410e9a6c3937afb2781bdc4260e05e2851499812169622a0d7a460c69dd9acd8",
+      "network-timeouts.md": "bbaf9105f4c5737ce781f78f2316b0bbcb5bfe9491fae88d907ceffd58f1add0",
+      "slow-db-queries.md": "decb0ae9d6b2088505f15bc589facc5adb85c811ee3fe785e0cd05b74c9a3a98"
+    },
+    "model": "openai/gpt-oss-20b",
+    "rag_top_k": 3,
+    "request_interval_seconds": 6.0,
+    "retries": 1,
+    "sampling": "provider defaults for both arms"
+  },
+  "results": {
+    "without_rag": {
+      "metrics": {
+        "sample_count": 30,
+        "success_count": 26,
+        "success_rate": 0.8666666666666667,
+        "severity_incorrect_count": 9,
+        "severity_accuracy": 0.6538461538461539,
+        "severity_macro_f1": 0.5023809523809524,
+        "cause_incorrect_count": 5,
+        "cause_accuracy": 0.8076923076923077,
+        "schema_valid_count": 26,
+        "schema_invalid_count": 0,
+        "schema_unassessed_count": 4,
+        "schema_valid_rate": 1.0,
+        "error_count": 4,
+        "errors_by_type": {
+          "http_4xx": 4
+        },
+        "attempt_errors_by_type": {
+          "http_4xx": 4,
+          "http_429": 2
+        },
+        "analysis_attempts": 32,
+        "uncertainty_expected_count": 3,
+        "uncertainty_sample_count": 3,
+        "uncertainty_rate": 0.6666666666666666,
+        "responses_with_sources": 0,
+        "source_coverage_rate": 0.0,
+        "citation_checked_count": 0,
+        "citation_validity_rate": null,
+        "relevant_source_sample_count": 21,
+        "relevant_source_recall": 0.0,
+        "latency_mean_ms": 9833.64595193334,
+        "latency_median_ms": 5980.33293650019
+      },
+      "cases": [
+        {
+          "id": "INC-001",
+          "expected_severity": "high",
+          "predicted_severity": "unknown",
+          "expected_cause": "db_pool",
+          "predicted_cause": "db_pool",
+          "cause_category_matches": [
+            "db_pool"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 751.7332830000214,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "db-pool-exhaustion.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-002",
+          "expected_severity": "low",
+          "predicted_severity": null,
+          "expected_cause": "db_pool",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 5615.006472000005,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "db-pool-exhaustion.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-003",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "db_pool",
+          "predicted_cause": "db_pool",
+          "cause_category_matches": [
+            "db_pool"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6711.340462999942,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "db-pool-exhaustion.md",
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-004",
+          "expected_severity": "critical",
+          "predicted_severity": null,
+          "expected_cause": "http_503",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 5358.3561030000055,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-005",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "http_503",
+          "predicted_cause": "http_503",
+          "cause_category_matches": [
+            "http_503"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6312.087670999972,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-006",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "http_503",
+          "predicted_cause": "http_503",
+          "cause_category_matches": [
+            "http_503"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 2,
+          "latency_ms": 65567.40270299997,
+          "attempt_errors": [
+            "http_429"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_429",
+              "http_status": 429
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-007",
+          "expected_severity": "high",
+          "predicted_severity": "critical",
+          "expected_cause": "high_cpu",
+          "predicted_cause": "high_cpu",
+          "cause_category_matches": [
+            "high_cpu"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6018.418510999936,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "high-cpu.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-008",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "high_cpu",
+          "predicted_cause": "high_cpu",
+          "cause_category_matches": [
+            "high_cpu"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5820.778173999997,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "high-cpu.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-009",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "high_cpu",
+          "predicted_cause": "high_cpu",
+          "cause_category_matches": [
+            "high_cpu"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6121.832019000067,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "high-cpu.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-010",
+          "expected_severity": "critical",
+          "predicted_severity": "high",
+          "expected_cause": "memory_oom",
+          "predicted_cause": "memory_oom",
+          "cause_category_matches": [
+            "memory_oom"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6460.88280999993,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "memory-leak-oom.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-011",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "memory_oom",
+          "predicted_cause": "memory_oom",
+          "cause_category_matches": [
+            "memory_oom"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5506.05420099987,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "memory-leak-oom.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-012",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "memory_oom",
+          "predicted_cause": "memory_oom",
+          "cause_category_matches": [
+            "memory_oom"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5975.404434000211,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "memory-leak-oom.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-013",
+          "expected_severity": "high",
+          "predicted_severity": "high",
+          "expected_cause": "kafka_lag",
+          "predicted_cause": "kafka_lag",
+          "cause_category_matches": [
+            "kafka_lag"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 7291.645146000064,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "kafka-consumer-lag.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-014",
+          "expected_severity": "low",
+          "predicted_severity": "medium",
+          "expected_cause": "kafka_lag",
+          "predicted_cause": "kafka_lag",
+          "cause_category_matches": [
+            "kafka_lag"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5693.9417399999,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "kafka-consumer-lag.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-015",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "kafka_lag",
+          "predicted_cause": "unclassified",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5985.261439000169,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "kafka-consumer-lag.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-016",
+          "expected_severity": "high",
+          "predicted_severity": "critical",
+          "expected_cause": "network_timeout",
+          "predicted_cause": "network_timeout",
+          "cause_category_matches": [
+            "network_timeout"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5824.534675999985,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "network-timeouts.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-017",
+          "expected_severity": "medium",
+          "predicted_severity": "low",
+          "expected_cause": "network_timeout",
+          "predicted_cause": "network_timeout",
+          "cause_category_matches": [
+            "network_timeout"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5470.992162999664,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "network-timeouts.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-018",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "network_timeout",
+          "predicted_cause": "network_timeout",
+          "cause_category_matches": [
+            "network_timeout"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5681.064318000153,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "network-timeouts.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-019",
+          "expected_severity": "critical",
+          "predicted_severity": null,
+          "expected_cause": "slow_query",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 6549.19986799996,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-020",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "slow_query",
+          "predicted_cause": "unclassified",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5614.1242940002485,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-021",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "slow_query",
+          "predicted_cause": "slow_query",
+          "cause_category_matches": [
+            "slow_query"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5854.855498999768,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-022",
+          "expected_severity": "high",
+          "predicted_severity": "high",
+          "expected_cause": "deploy_regression",
+          "predicted_cause": "unclassified",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6200.674301000163,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "deployment-regression.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-023",
+          "expected_severity": "medium",
+          "predicted_severity": "low",
+          "expected_cause": "deploy_regression",
+          "predicted_cause": "deploy_regression",
+          "cause_category_matches": [
+            "deploy_regression"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 2,
+          "latency_ms": 66352.6524130002,
+          "attempt_errors": [
+            "http_429"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_429",
+              "http_status": 429
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "deployment-regression.md",
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-024",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "deploy_regression",
+          "predicted_cause": "unclassified",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6260.0199970001995,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [
+            "deployment-regression.md"
+          ],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-025",
+          "expected_severity": "unknown",
+          "predicted_severity": "unknown",
+          "expected_cause": "unknown",
+          "predicted_cause": "unknown",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5466.930612999931,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": true,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-026",
+          "expected_severity": "unknown",
+          "predicted_severity": "low",
+          "expected_cause": "unknown",
+          "predicted_cause": "unknown",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5857.614285000182,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": true,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-027",
+          "expected_severity": "high",
+          "predicted_severity": null,
+          "expected_cause": "certificate",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 6087.155397999595,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-028",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "authorization",
+          "predicted_cause": "authorization",
+          "cause_category_matches": [
+            "authorization"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5828.17870000008,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-029",
+          "expected_severity": "medium",
+          "predicted_severity": "low",
+          "expected_cause": "localization",
+          "predicted_cause": "localization",
+          "cause_category_matches": [
+            "localization"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6333.213094999792,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-030",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "unknown",
+          "predicted_cause": "unclassified",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6438.02376900021,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": true,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        }
+      ]
+    },
+    "with_rag": {
+      "metrics": {
+        "sample_count": 30,
+        "success_count": 26,
+        "success_rate": 0.8666666666666667,
+        "severity_incorrect_count": 10,
+        "severity_accuracy": 0.6153846153846154,
+        "severity_macro_f1": 0.4488888888888889,
+        "cause_incorrect_count": 2,
+        "cause_accuracy": 0.9230769230769231,
+        "schema_valid_count": 26,
+        "schema_invalid_count": 0,
+        "schema_unassessed_count": 4,
+        "schema_valid_rate": 1.0,
+        "error_count": 4,
+        "errors_by_type": {
+          "http_4xx": 4
+        },
+        "attempt_errors_by_type": {
+          "http_4xx": 4,
+          "http_429": 1
+        },
+        "analysis_attempts": 31,
+        "uncertainty_expected_count": 3,
+        "uncertainty_sample_count": 2,
+        "uncertainty_rate": 0.0,
+        "responses_with_sources": 22,
+        "source_coverage_rate": 0.8461538461538461,
+        "citation_checked_count": 22,
+        "citation_validity_rate": 1.0,
+        "relevant_source_sample_count": 21,
+        "relevant_source_recall": 0.9523809523809523,
+        "latency_mean_ms": 8044.549065866651,
+        "latency_median_ms": 6081.882751499961
+      },
+      "cases": [
+        {
+          "id": "INC-001",
+          "expected_severity": "high",
+          "predicted_severity": "high",
+          "expected_cause": "db_pool",
+          "predicted_cause": "db_pool",
+          "cause_category_matches": [
+            "db_pool"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6550.9434620000775,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "expected_documents": [
+            "db-pool-exhaustion.md"
+          ],
+          "retrieved_source_ids": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-002",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "db_pool",
+          "predicted_cause": "db_pool",
+          "cause_category_matches": [
+            "db_pool"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5643.218709999928,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "expected_documents": [
+            "db-pool-exhaustion.md"
+          ],
+          "retrieved_source_ids": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-003",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "db_pool",
+          "predicted_cause": "db_pool",
+          "cause_category_matches": [
+            "db_pool"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6446.497101999967,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "slow-db-queries.md#signals:1"
+          ],
+          "expected_documents": [
+            "db-pool-exhaustion.md",
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "slow-db-queries.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-004",
+          "expected_severity": "critical",
+          "predicted_severity": "high",
+          "expected_cause": "http_503",
+          "predicted_cause": "http_503",
+          "cause_category_matches": [
+            "http_503"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5535.363718999861,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "http-503.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "expected_documents": [
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [
+            "http-503.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-005",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "http_503",
+          "predicted_cause": "http_503",
+          "cause_category_matches": [
+            "http_503"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6572.142588000133,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "http-503.md#diagnostics:1",
+            "http-503.md#signals:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "expected_documents": [
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [
+            "http-503.md#diagnostics:1",
+            "http-503.md#signals:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-006",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "http_503",
+          "predicted_cause": "http_503",
+          "cause_category_matches": [
+            "http_503"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6200.466650999942,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "http-503.md#diagnostics:1",
+            "http-503.md#signals:1",
+            "high-cpu.md#diagnostics:1"
+          ],
+          "expected_documents": [
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [
+            "http-503.md#diagnostics:1",
+            "http-503.md#signals:1",
+            "high-cpu.md#diagnostics:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-007",
+          "expected_severity": "high",
+          "predicted_severity": null,
+          "expected_cause": "high_cpu",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 6764.317222000045,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "high-cpu.md"
+          ],
+          "retrieved_source_ids": [
+            "high-cpu.md#signals:1",
+            "high-cpu.md#diagnostics:1",
+            "kafka-consumer-lag.md#signals:1"
+          ],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-008",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "high_cpu",
+          "predicted_cause": "high_cpu",
+          "cause_category_matches": [
+            "high_cpu"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5329.249888000049,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "high-cpu.md#diagnostics:1",
+            "high-cpu.md#signals:1"
+          ],
+          "expected_documents": [
+            "high-cpu.md"
+          ],
+          "retrieved_source_ids": [
+            "high-cpu.md#diagnostics:1",
+            "high-cpu.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-009",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "high_cpu",
+          "predicted_cause": "high_cpu",
+          "cause_category_matches": [
+            "high_cpu"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6009.73212599979,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [
+            "high-cpu.md#signals:1",
+            "high-cpu.md#diagnostics:1",
+            "slow-db-queries.md#signals:1"
+          ],
+          "expected_documents": [
+            "high-cpu.md"
+          ],
+          "retrieved_source_ids": [
+            "high-cpu.md#signals:1",
+            "high-cpu.md#diagnostics:1",
+            "slow-db-queries.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-010",
+          "expected_severity": "critical",
+          "predicted_severity": "critical",
+          "expected_cause": "memory_oom",
+          "predicted_cause": "memory_oom",
+          "cause_category_matches": [
+            "memory_oom"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5701.83658499991,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "memory-leak-oom.md#diagnostics:1",
+            "memory-leak-oom.md#signals:1"
+          ],
+          "expected_documents": [
+            "memory-leak-oom.md"
+          ],
+          "retrieved_source_ids": [
+            "memory-leak-oom.md#diagnostics:1",
+            "memory-leak-oom.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-011",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "memory_oom",
+          "predicted_cause": "memory_oom",
+          "cause_category_matches": [
+            "memory_oom"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6345.281066000098,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [
+            "memory-leak-oom.md#signals:1",
+            "memory-leak-oom.md#diagnostics:1",
+            "high-cpu.md#signals:1"
+          ],
+          "expected_documents": [
+            "memory-leak-oom.md"
+          ],
+          "retrieved_source_ids": [
+            "memory-leak-oom.md#signals:1",
+            "memory-leak-oom.md#diagnostics:1",
+            "high-cpu.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-012",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "memory_oom",
+          "predicted_cause": "memory_oom",
+          "cause_category_matches": [
+            "memory_oom"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5777.575362999869,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [
+            "memory-leak-oom.md#signals:1",
+            "memory-leak-oom.md#diagnostics:1"
+          ],
+          "expected_documents": [
+            "memory-leak-oom.md"
+          ],
+          "retrieved_source_ids": [
+            "memory-leak-oom.md#signals:1",
+            "memory-leak-oom.md#diagnostics:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-013",
+          "expected_severity": "high",
+          "predicted_severity": null,
+          "expected_cause": "kafka_lag",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 4547.542725999847,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "kafka-consumer-lag.md"
+          ],
+          "retrieved_source_ids": [
+            "kafka-consumer-lag.md#signals:1",
+            "kafka-consumer-lag.md#diagnostics:1",
+            "deployment-regression.md#signals:1"
+          ],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-014",
+          "expected_severity": "low",
+          "predicted_severity": "medium",
+          "expected_cause": "kafka_lag",
+          "predicted_cause": "kafka_lag",
+          "cause_category_matches": [
+            "kafka_lag"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 2,
+          "latency_ms": 66847.70584499984,
+          "attempt_errors": [
+            "http_429"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_429",
+              "http_status": 429
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "kafka-consumer-lag.md#diagnostics:1",
+            "kafka-consumer-lag.md#signals:1",
+            "slow-db-queries.md#diagnostics:1"
+          ],
+          "expected_documents": [
+            "kafka-consumer-lag.md"
+          ],
+          "retrieved_source_ids": [
+            "kafka-consumer-lag.md#diagnostics:1",
+            "kafka-consumer-lag.md#signals:1",
+            "slow-db-queries.md#diagnostics:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-015",
+          "expected_severity": "medium",
+          "predicted_severity": "high",
+          "expected_cause": "kafka_lag",
+          "predicted_cause": "kafka_lag",
+          "cause_category_matches": [
+            "kafka_lag"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6091.796526000053,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "kafka-consumer-lag.md#diagnostics:1",
+            "kafka-consumer-lag.md#signals:1",
+            "slow-db-queries.md#signals:1"
+          ],
+          "expected_documents": [
+            "kafka-consumer-lag.md"
+          ],
+          "retrieved_source_ids": [
+            "kafka-consumer-lag.md#diagnostics:1",
+            "kafka-consumer-lag.md#signals:1",
+            "slow-db-queries.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-016",
+          "expected_severity": "high",
+          "predicted_severity": "critical",
+          "expected_cause": "network_timeout",
+          "predicted_cause": "network_timeout",
+          "cause_category_matches": [
+            "network_timeout"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6332.085507000102,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "network-timeouts.md#signals:1",
+            "network-timeouts.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "expected_documents": [
+            "network-timeouts.md"
+          ],
+          "retrieved_source_ids": [
+            "network-timeouts.md#signals:1",
+            "network-timeouts.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-017",
+          "expected_severity": "medium",
+          "predicted_severity": "unknown",
+          "expected_cause": "network_timeout",
+          "predicted_cause": "network_timeout",
+          "cause_category_matches": [
+            "network_timeout"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6584.337400000095,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "network-timeouts.md#signals:1",
+            "network-timeouts.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "expected_documents": [
+            "network-timeouts.md"
+          ],
+          "retrieved_source_ids": [
+            "network-timeouts.md#signals:1",
+            "network-timeouts.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-018",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "network_timeout",
+          "predicted_cause": "network_timeout",
+          "cause_category_matches": [
+            "network_timeout"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5686.928874999921,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [
+            "network-timeouts.md#signals:1",
+            "network-timeouts.md#diagnostics:1"
+          ],
+          "expected_documents": [
+            "network-timeouts.md"
+          ],
+          "retrieved_source_ids": [
+            "network-timeouts.md#signals:1",
+            "network-timeouts.md#diagnostics:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-019",
+          "expected_severity": "critical",
+          "predicted_severity": "high",
+          "expected_cause": "slow_query",
+          "predicted_cause": "slow_query",
+          "cause_category_matches": [
+            "slow_query"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6476.79865200007,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "expected_documents": [
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [
+            "db-pool-exhaustion.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1",
+            "network-timeouts.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-020",
+          "expected_severity": "medium",
+          "predicted_severity": "medium",
+          "expected_cause": "slow_query",
+          "predicted_cause": "slow_query",
+          "cause_category_matches": [
+            "slow_query"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5794.027989999904,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "slow-db-queries.md#signals:1",
+            "slow-db-queries.md#diagnostics:1"
+          ],
+          "expected_documents": [
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [
+            "slow-db-queries.md#signals:1",
+            "slow-db-queries.md#diagnostics:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-021",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "slow_query",
+          "predicted_cause": "slow_query",
+          "cause_category_matches": [
+            "slow_query"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6840.399194999918,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "slow-db-queries.md#diagnostics:1",
+            "slow-db-queries.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1"
+          ],
+          "expected_documents": [
+            "slow-db-queries.md"
+          ],
+          "retrieved_source_ids": [
+            "slow-db-queries.md#diagnostics:1",
+            "slow-db-queries.md#signals:1",
+            "db-pool-exhaustion.md#diagnostics:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-022",
+          "expected_severity": "high",
+          "predicted_severity": "high",
+          "expected_cause": "deploy_regression",
+          "predicted_cause": "unclassified",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5186.444987999948,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [
+            "deployment-regression.md#signals:1",
+            "http-503.md#diagnostics:1",
+            "deployment-regression.md#diagnostics:1"
+          ],
+          "expected_documents": [
+            "deployment-regression.md"
+          ],
+          "retrieved_source_ids": [
+            "deployment-regression.md#signals:1",
+            "http-503.md#diagnostics:1",
+            "deployment-regression.md#diagnostics:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-023",
+          "expected_severity": "medium",
+          "predicted_severity": "low",
+          "expected_cause": "deploy_regression",
+          "predicted_cause": "deploy_regression",
+          "cause_category_matches": [
+            "deploy_regression"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6280.386797000119,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [
+            "http-503.md#diagnostics:1",
+            "deployment-regression.md#signals:1",
+            "http-503.md#signals:1"
+          ],
+          "expected_documents": [
+            "deployment-regression.md",
+            "http-503.md"
+          ],
+          "retrieved_source_ids": [
+            "http-503.md#diagnostics:1",
+            "deployment-regression.md#signals:1",
+            "http-503.md#signals:1"
+          ],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-024",
+          "expected_severity": "low",
+          "predicted_severity": null,
+          "expected_cause": "deploy_regression",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 5510.734456000137,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [
+            "deployment-regression.md"
+          ],
+          "retrieved_source_ids": [
+            "deployment-regression.md#signals:1",
+            "slow-db-queries.md#diagnostics:1",
+            "deployment-regression.md#diagnostics:1"
+          ],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-025",
+          "expected_severity": "unknown",
+          "predicted_severity": null,
+          "expected_cause": "unknown",
+          "predicted_cause": null,
+          "cause_category_matches": null,
+          "schema_valid": null,
+          "error": "http_4xx",
+          "attempts": 1,
+          "latency_ms": 5828.91950200019,
+          "attempt_errors": [
+            "http_4xx"
+          ],
+          "attempt_error_details": [
+            {
+              "attempt": 1,
+              "category": "http_4xx",
+              "http_status": 400,
+              "provider_error": {
+                "type": "invalid_request_error",
+                "code": "json_validate_failed"
+              }
+            }
+          ],
+          "uncertainty_expected": true,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": null
+        },
+        {
+          "id": "INC-026",
+          "expected_severity": "unknown",
+          "predicted_severity": "low",
+          "expected_cause": "unknown",
+          "predicted_cause": "unknown",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6540.89398699989,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": true,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-027",
+          "expected_severity": "high",
+          "predicted_severity": "critical",
+          "expected_cause": "certificate",
+          "predicted_cause": "certificate",
+          "cause_category_matches": [
+            "certificate"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6071.9689769998695,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": true,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-028",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "authorization",
+          "predicted_cause": "authorization",
+          "cause_category_matches": [
+            "authorization"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5852.369020000424,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-029",
+          "expected_severity": "medium",
+          "predicted_severity": "low",
+          "expected_cause": "localization",
+          "predicted_cause": "localization",
+          "cause_category_matches": [
+            "localization"
+          ],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 5884.991691999858,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": false,
+          "uncertainty_present": false,
+          "sources": [],
+          "expected_documents": [],
+          "retrieved_source_ids": [],
+          "citations_valid": true
+        },
+        {
+          "id": "INC-030",
+          "expected_severity": "low",
+          "predicted_severity": "low",
+          "expected_cause": "unknown",
+          "predicted_cause": "unclassified",
+          "cause_category_matches": [],
+          "schema_valid": true,
+          "error": null,
+          "attempts": 1,
+          "latency_ms": 6101.515358999677,
+          "attempt_errors": [],
+          "attempt_error_details": [],
+          "uncertainty_expected": true,
+          "uncertainty_present": false,
+          "sources": [
+            "http-503.md#diagnostics:1",
+            "high-cpu.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "expected_documents": [],
+          "retrieved_source_ids": [
+            "http-503.md#diagnostics:1",
+            "high-cpu.md#diagnostics:1",
+            "http-503.md#signals:1"
+          ],
+          "citations_valid": true
+        }
+      ]
+    },
+    "paired": {
+      "case_ids": [
+        "INC-001",
+        "INC-003",
+        "INC-005",
+        "INC-006",
+        "INC-008",
+        "INC-009",
+        "INC-010",
+        "INC-011",
+        "INC-012",
+        "INC-014",
+        "INC-015",
+        "INC-016",
+        "INC-017",
+        "INC-018",
+        "INC-020",
+        "INC-021",
+        "INC-022",
+        "INC-023",
+        "INC-026",
+        "INC-028",
+        "INC-029",
+        "INC-030"
+      ],
+      "without_rag": {
+        "sample_count": 22,
+        "success_count": 22,
+        "success_rate": 1.0,
+        "severity_incorrect_count": 8,
+        "severity_accuracy": 0.6363636363636364,
+        "severity_macro_f1": 0.3773684210526316,
+        "cause_incorrect_count": 4,
+        "cause_accuracy": 0.8181818181818182,
+        "schema_valid_count": 22,
+        "schema_invalid_count": 0,
+        "schema_unassessed_count": 0,
+        "schema_valid_rate": 1.0,
+        "error_count": 0,
+        "errors_by_type": {},
+        "attempt_errors_by_type": {
+          "http_429": 2
+        },
+        "analysis_attempts": 24,
+        "uncertainty_expected_count": 2,
+        "uncertainty_sample_count": 2,
+        "uncertainty_rate": 0.5,
+        "responses_with_sources": 0,
+        "source_coverage_rate": 0.0,
+        "citation_checked_count": 0,
+        "citation_validity_rate": null,
+        "relevant_source_sample_count": 18,
+        "relevant_source_recall": 0.0,
+        "latency_mean_ms": 11198.302111363659,
+        "latency_median_ms": 5916.509359500196
+      },
+      "with_rag": {
+        "sample_count": 22,
+        "success_count": 22,
+        "success_rate": 1.0,
+        "severity_incorrect_count": 7,
+        "severity_accuracy": 0.6818181818181818,
+        "severity_macro_f1": 0.5555555555555556,
+        "cause_incorrect_count": 2,
+        "cause_accuracy": 0.9090909090909091,
+        "schema_valid_count": 22,
+        "schema_invalid_count": 0,
+        "schema_unassessed_count": 0,
+        "schema_valid_rate": 1.0,
+        "error_count": 0,
+        "errors_by_type": {},
+        "attempt_errors_by_type": {
+          "http_429": 1
+        },
+        "analysis_attempts": 23,
+        "uncertainty_expected_count": 2,
+        "uncertainty_sample_count": 2,
+        "uncertainty_rate": 0.0,
+        "responses_with_sources": 19,
+        "source_coverage_rate": 0.8636363636363636,
+        "citation_checked_count": 19,
+        "citation_validity_rate": 1.0,
+        "relevant_source_sample_count": 18,
+        "relevant_source_recall": 1.0,
+        "latency_mean_ms": 8861.70945509089,
+        "latency_median_ms": 6150.99100499981
+      },
+      "with_minus_without": {
+        "severity_accuracy": 0.045454545454545414,
+        "severity_macro_f1": 0.178187134502924,
+        "cause_accuracy": 0.09090909090909083,
+        "latency_mean_ms": -2336.592656272769,
+        "latency_median_ms": 234.48164549961348
+      }
+    },
+    "with_minus_without": {
+      "severity_accuracy": 0.045454545454545414,
+      "severity_macro_f1": 0.178187134502924,
+      "cause_accuracy": 0.09090909090909083,
+      "latency_mean_ms": -2336.592656272769,
+      "latency_median_ms": 234.48164549961348
+    }
+  }
+}

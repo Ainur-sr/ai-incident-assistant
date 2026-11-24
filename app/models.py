@@ -19,13 +19,29 @@ class IncidentRequest(BaseModel):
         return value
 
 
-class IncidentAnalysis(BaseModel):
+class Hypothesis(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    claim: str
+    source_ids: list[str]
+
+
+class AnalysisFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     severity: Severity
     summary: str
-    likely_causes: list[str]
     recommended_actions: list[str]
-    sources: list[str]
     needs_human_review: bool
     limitations: list[str]
+
+
+class ProviderAnalysis(AnalysisFields):
+    hypotheses: list[Hypothesis]
+
+
+class IncidentAnalysis(AnalysisFields):
+    likely_causes: list[str]
+    sources: list[str]
+    hypothesis_evidence: list[Hypothesis] = Field(default_factory=list)
+    retrieved_sources: list[str] = Field(default_factory=list)

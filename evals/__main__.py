@@ -13,8 +13,8 @@ from app.models import IncidentRequest
 from app.retrieval import RunbookChunk
 from evals.metrics import retrieval_metrics
 from evals.runner import (
-    Case, Dataset, analysis_report, compare_rag, comparison_report,
-    evaluate_analysis, evaluate_retrieval, pace,
+    Case, Dataset, PacedAnalysis, analysis_report, compare_rag, comparison_report,
+    evaluate_analysis, evaluate_retrieval,
 )
 
 EVAL_DIR = Path(__file__).resolve().parent
@@ -37,7 +37,9 @@ def write_reports(report: dict, directory: Path = RESULTS_DIR, *, stem: str | No
     stem = stem or report["mode"]
     json_path = directory / f"{stem}.json"
     markdown_path = directory / f"{stem}.md"
-    json_path.write_text(dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    mode = "x" if stem in {"live", "retrieval"} else "w"
+    with json_path.open(mode, encoding="utf-8") as output:
+        output.write(dumps(report, indent=2, allow_nan=False) + "\n")
     lines = [
         f"# Incident evaluation — {report['mode']}", "",
         f"Dataset version {report['dataset_version']} ({report['sample_count']} cases).", "",
@@ -77,7 +79,8 @@ def write_reports(report: dict, directory: Path = RESULTS_DIR, *, stem: str | No
         "", "See the JSON report for individual case outcomes.",
         "Subjective quality was not scored. See the manual rubric in evals/README.md.",
     ]
-    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with markdown_path.open(mode, encoding="utf-8") as output:
+        output.write("\n".join(lines) + "\n")
     return json_path, markdown_path
 
 
@@ -93,13 +96,20 @@ async def mock_analysis(incident: IncidentRequest, _evidence: list[RunbookChunk]
 
 
 async def run_live(
-    cases: list[Case], api_key: str, model: str, interval: float, retries: int
+    cases: list[Case], api_key: str, model: str, interval: float, retries: int,
+    *, capture_claims: bool = False,
 ) -> dict:
     async with llm.create_groq_client(api_key) as client:
         async def analyze(incident, evidence):
-            return await llm.analyze_with_groq(incident, client, model, evidence)
+            return await llm.analyze_with_groq(
+                incident, client, model, evidence, record_provider_ms=paced.record_provider_ms,
+            )
 
-        return await compare_rag(cases, pace(analyze, interval), retrieval.retrieve, 3, retries)
+        paced = PacedAnalysis(analyze, interval)
+        return await compare_rag(
+            cases, paced, retrieval.retrieve, 3, retries,
+            capture_claims=capture_claims,
+        )
 
 
 def rescore_report(report: dict) -> dict:
@@ -146,6 +156,9 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Evaluate synthetic incidents.")
     parser.add_argument("mode", choices=("retrieval", "mock", "live", "rescore"))
     parser.add_argument("--saved-report", type=Path, help="Saved JSON report to rescore offline.")
+    parser.add_argument("--output-dir", type=Path, help="Write reports to a separate directory.")
+    parser.add_argument("--capture-claims", action="store_true",
+                        help="Include generated hypotheses for local review of synthetic cases.")
     parser.add_argument("--allow-live", action="store_true", help="Authorize real GroqCloud requests.")
     parser.add_argument("--case-ids", nargs="+", metavar="ID", help="Evaluate selected cases in the given order.")
     parser.add_argument("--request-interval", type=float, default=3.0)
@@ -155,6 +168,8 @@ def main(argv: list[str] | None = None) -> None:
         parser.error("Live evaluation requires explicit --allow-live.")
     if args.mode != "live" and args.allow_live:
         parser.error("--allow-live is only valid in live mode.")
+    if args.mode != "live" and args.capture_claims:
+        parser.error("--capture-claims is only valid in live mode.")
     if not math.isfinite(args.request_interval) or args.request_interval < 0 or not 0 <= args.retries <= 5:
         parser.error("Request interval must be finite and nonnegative, and retries must be 0–5.")
 
@@ -163,11 +178,17 @@ def main(argv: list[str] | None = None) -> None:
             parser.error("Rescoring requires --saved-report and uses its original cases.")
         source = args.saved_report
         report = rescore_report(loads(source.read_text(encoding="utf-8")))
-        for path in write_reports(report, source.parent, stem=f"{source.stem}-rescored"):
+        for path in write_reports(report, args.output_dir or RESULTS_DIR, stem=f"{source.stem}-rescored"):
             print(path)
         return
     if args.saved_report is not None:
         parser.error("--saved-report is only valid in rescore mode.")
+
+    output_dir = args.output_dir or RESULTS_DIR
+    if args.mode in {"live", "retrieval"} and any(
+        (output_dir / f"{args.mode}.{ext}").exists() for ext in ("json", "md")
+    ):
+        parser.error("Reports already exist. Choose a fresh --output-dir.")
 
     dataset, dataset_digest = load_dataset()
     cases = dataset.cases
@@ -182,7 +203,7 @@ def main(argv: list[str] | None = None) -> None:
     settings = {
         "dataset_sha256": dataset_digest,
         "case_ids": [case.id for case in cases],
-        "packages": installed_versions("numpy", "sentence-transformers", "torch", "groq"),
+        "packages": installed_versions("numpy", "sentence-transformers", "torch", "groq", "pydantic", "httpx"),
     }
     if args.mode != "mock":
         corpus = {path.name: sha256(path.read_bytes()).hexdigest()
@@ -211,8 +232,14 @@ def main(argv: list[str] | None = None) -> None:
             parser.exit(1, "Local retrieval failed. Check the RAG dependencies and cached model.\n")
         model = config.groq_model()
         settings.update(model=model, rag_top_k=3, request_interval_seconds=args.request_interval,
-                        retries=args.retries, sampling="provider defaults for both arms")
-        results = asyncio.run(run_live(cases, api_key, model, args.request_interval, args.retries))
+                        retries=args.retries, sampling="provider defaults for both arms",
+                        schema_sha256=sha256(dumps(llm.ANALYSIS_SCHEMA, sort_keys=True).encode()).hexdigest(),
+                        prompt_sha256=sha256(llm.SYSTEM_PROMPT.encode()).hexdigest(),
+                        generation_retry_limit=min(args.retries, 1), capture_claims=args.capture_claims)
+        results = asyncio.run(run_live(
+            cases, api_key, model, args.request_interval, args.retries,
+            capture_claims=args.capture_claims,
+        ))
 
     paths = write_reports({
         "mode": args.mode,
@@ -221,7 +248,7 @@ def main(argv: list[str] | None = None) -> None:
         "sample_count": len(cases),
         "settings": settings,
         "results": results,
-    })
+    }, output_dir)
     for path in paths:
         print(path)
 

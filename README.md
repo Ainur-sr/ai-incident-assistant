@@ -1,243 +1,195 @@
 # AI Incident Triage Assistant
 
-A local FastAPI service for triaging synthetic software incidents. It runs offline by default and can use GroqCloud for analysis when explicitly enabled.
+[![CI](https://github.com/Ainur-sr/ai-incident-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Ainur-sr/ai-incident-assistant/actions/workflows/ci.yml)
 
-## Run with Docker
+A local-first FastAPI service that turns a synthetic incident report and optional
+logs into a triage brief. It helps an engineer decide how urgent an incident is,
+which hypotheses are worth investigating, and what evidence to collect next.
+It can run deterministic mock analysis offline or use GroqCloud for structured
+analysis, with optional local runbook retrieval in either mode.
 
-With Docker and the Compose plugin installed, build and start the Python 3.14
-service in its default mock mode with RAG disabled:
+## Quick start
+
+With Docker Compose on Linux or WSL:
 
 ```bash
 docker compose --env-file /dev/null up --build --wait
-curl --fail http://127.0.0.1:8000/health
+python3 scripts/smoke.py
 ```
 
-The API listens on local port 8000 and Compose waits for the container's
-`GET /health` check. The commands use `--env-file /dev/null` on Linux or WSL
-to skip automatic loading of the project's `.env` file. Compose still uses
-exported shell variables. After trying the API examples below, stop the service
-with `docker compose --env-file /dev/null down`.
+Open the interactive API docs at `http://127.0.0.1:8000/docs`. The default
+is mock mode with retrieval disabled. The explicit environment file skips
+automatic loading of a project `.env` while allowing exported shell settings.
+Stop the service with `docker compose --env-file /dev/null down`.
 
-To use GroqCloud in Docker, enter and export `GROQ_API_KEY` as shown in
-[Enable GroqCloud](#enable-groqcloud), then run
-`ANALYSIS_MODE=groq docker compose --env-file /dev/null up --build --wait`.
-Compose passes the key at runtime and accepts the optional `GROQ_MODEL` override.
-
-To use local RAG in Docker, build with the optional CPU dependencies, cache the
-public model in the Compose volume, and enable retrieval:
+To use Python 3.14 directly on Linux x86_64:
 
 ```bash
-INSTALL_RAG=true docker compose --env-file /dev/null build
-INSTALL_RAG=true docker compose --env-file /dev/null run --rm api python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu", token=False)'
-INSTALL_RAG=true RAG_ENABLED=true docker compose --env-file /dev/null up --wait
-```
-
-The one-time model download needs internet access. The cache volume survives
-`docker compose down`. Export `RAG_TOP_K` to override the default of three
-chunks. For GroqCloud with RAG, also set `ANALYSIS_MODE=groq` and export the key.
-
-## Setup and run
-
-Use Python 3.14 for the documented setup. If the repository already has a compatible `.venv`, reuse it and skip the first command.
-
-```bash
-python3 -m venv .venv
+python3.14 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-python -m uvicorn app.main:app --reload
+python -m pip install -c requirements-lock.txt -r requirements-dev.txt
+python -m uvicorn app.main:app
 ```
 
-FastAPI serves interactive API docs at http://127.0.0.1:8000/docs.
+### Example
 
 ```bash
-curl http://127.0.0.1:8000/health
-
-curl -X POST http://127.0.0.1:8000/analyze \
+curl http://127.0.0.1:8000/analyze \
   -H 'Content-Type: application/json' \
-  -d '{"description":"Synthetic checkout request timed out.","logs":"ERROR upstream timeout"}'
+  -d '{"description":"Synthetic checkout request timed out."}'
 ```
 
-`GET /health` returns `{"status":"ok"}`. `POST /analyze` accepts a nonblank description up to 2,000 characters and optional logs up to 20,000 characters. Invalid requests return HTTP 422. Use only synthetic incident data.
-
-## Enable GroqCloud
-
-In the shell that runs Uvicorn, enter the API key at the hidden prompt and export it:
-
-```bash
-read -rsp 'Groq API key: ' GROQ_API_KEY
-printf '\n'
-export GROQ_API_KEY
-export ANALYSIS_MODE=groq
-export GROQ_MODEL=openai/gpt-oss-20b
-python -m uvicorn app.main:app --reload
+```json
+{
+  "severity": "unknown",
+  "summary": "The incident text mentions a timeout.",
+  "recommended_actions": [
+    "Check dependency latency and error rates around the incident time.",
+    "Inspect request traces for the operation associated with the timeout."
+  ],
+  "needs_human_review": true,
+  "limitations": [
+    "Rule-based assessment. Verify impact and hypotheses with incident evidence.",
+    "No application logs were provided.",
+    "A timeout mention alone does not establish a cause or user impact."
+  ],
+  "likely_causes": [],
+  "sources": [],
+  "hypothesis_evidence": [],
+  "retrieved_sources": []
+}
 ```
 
-`GROQ_MODEL` is optional and defaults to `openai/gpt-oss-20b`. Any override must
-support strict Structured Outputs. `.env.example` lists the available settings
-with placeholder values. The application reads process environment variables.
-Use `ANALYSIS_MODE=mock` for deterministic offline analysis.
-
-In Groq mode, `POST /analyze` sends the description and logs to GroqCloud. Use
-only synthetic data. Responses include severity, hypotheses, safe diagnostics,
-evidence limitations, and an indicator for human review. With RAG disabled, `sources` is empty.
-
-| HTTP status | Meaning |
-| --- | --- |
-| 422 | Invalid incident input |
-| 502 | Invalid upstream response or upstream request rejection |
-| 503 | Invalid or missing service configuration, upstream rate limit, provider unavailability, or local retrieval failure |
-| 504 | Upstream timeout |
-
-The client uses a 15-second SDK timeout and disables automatic retries.
-
-## Enable local runbook retrieval
-
-With the Python 3.14 virtual environment active, install a CPU build of PyTorch
-and the RAG dependencies. Pre-download the public embedding model once:
-
-```bash
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -r requirements-rag.txt
-python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu", token=False)'
-```
-
-Then start the API with retrieval enabled:
-
-```bash
-export RAG_ENABLED=true
-export RAG_TOP_K=3
-python -m uvicorn app.main:app --reload
-```
-
-Set `ANALYSIS_MODE=groq` and export the key as shown above to include the
-retrieved excerpts in the Groq request. Mock mode can also return local sources
-while keeping its deterministic analysis. The application only loads cached
-model files at runtime. Missing dependencies or weights produce HTTP 503 on
-analysis requests. `GET /health` stays independent of retrieval.
-
-`app/retrieval.py` reads the eight synthetic Markdown files in `runbooks/`,
-splits them on headings and caps long sections at 120 words per chunk. The first
-RAG request embeds the corpus once per process. Restart the process to pick up
-runbook edits. Each search embeds the description and, if present, up to 600
-characters from each end of the logs. NumPy ranks chunks by their highest cosine
-similarity across those query vectors. The cutoff of 0.30 is a starting
-heuristic. Up to `RAG_TOP_K` chunks are returned in descending relevance.
-
-The API attaches source IDs from the selected chunks, such as
-`network-timeouts.md#diagnostics:1`. IDs use the filename, section slug, and
-one-based part number. They identify the excerpts supplied as context. When
-nothing meets the cutoff, analysis continues with empty sources and a limitation
-indicating that no relevant runbook was found. Logs and excerpts are placed in
-the user message as reference data. Use only synthetic incident data and
-runbooks, since Groq mode sends them to the provider.
+`GET /health` returns `{"status":"ok"}` independently of provider or model
+availability. `POST /analyze` accepts up to 2,000 description characters and
+20,000 log characters. `hypothesis_evidence` pairs each model hypothesis with
+its validated `source_ids`. `likely_causes` remains the list of hypothesis text.
+`sources` is the union of the cited IDs. `retrieved_sources` lists all candidate
+chunks, including those left uncited. Mock mode can return retrieval context
+while abstaining from a diagnosis.
 
 ## Architecture
 
-`app/main.py` defines the HTTP routes and maps analysis errors to safe HTTP
-responses. `app/config.py` reads the process environment and `app/models.py`
-defines the request and response schemas. `app/analysis.py` provides deterministic
-mock analysis. `app/llm.py` uses the official async Groq SDK to call Chat
-Completions. It generates the strict JSON Schema from the Pydantic response
-model and independently validates the returned JSON before releasing the result.
-
-FastAPI exposes the HTTP API and Uvicorn runs the local server. Pytest and AnyIO
-run the offline tests. HTTPX sends requests directly to the ASGI app and mocks
-Groq's HTTP transport in integration tests. API tests using retrieval doubles run those
-doubles inline at the thread-pool boundary. Mock Groq clients also use a fixed
-OS header to skip background platform detection. This keeps the ASGI tests
-independent of cross-thread socket wakeups in restricted environments.
-Retrieval tests use deterministic
-NumPy embeddings, so the suite requires neither model weights nor network access.
-
-## Tests
-
-```bash
-python -m pytest
+```mermaid
+flowchart LR
+    Client --> API["FastAPI • request limits and Pydantic"]
+    API --> Mock["Deterministic mock"]
+    API --> Adapter["Async Groq adapter"]
+    API --> RAG["Optional local retrieval"]
+    RAG --> Runbooks["Synthetic Markdown runbooks"]
+    RAG --> Adapter
+    Adapter --> Provider["GroqCloud • GPT-OSS 20B"]
+    Mock --> Response["Structured triage brief"]
+    Adapter --> Response
 ```
 
-GitHub Actions runs CI on pushes and pull requests. It installs the development
-dependencies on Python 3.14, runs the offline pytest suite, validates Compose,
-and builds and starts the default image to check `GET /health`. CI uses mock
-mode with RAG disabled and requires internet access only for dependencies,
-actions, and the base image. To reproduce the Docker checks locally, run
-`docker compose --env-file /dev/null config --quiet` and the default Docker
-commands above.
+### RAG pipeline
 
-For an optional manual integration check, enable Groq mode and run the
-synthetic `/analyze` curl example above. Expect HTTP 200 with the structured
-analysis. Check that the hypotheses and limitations reflect the synthetic input
-and that any `sources` resolve to the local runbooks. With RAG disabled, expect
-an empty source list. This check makes a real GroqCloud request and may consume
-provider quota or incur charges.
-
-## Evaluation
-
-The versioned benchmark contains 30 synthetic incidents covering the eight
-runbooks, ambiguity, out-of-domain incidents and misleading inputs. See the
-[labeling guide and metric definitions](evals/README.md).
-
-```bash
-# Real local embeddings. Pre-cache the model as shown above.
-HF_HUB_OFFLINE=1 python -m evals retrieval
-
-# Deterministic analysis baseline using the application's local rules.
-python -m evals mock
+```mermaid
+flowchart LR
+    Docs["Markdown headings"] --> Chunks["Chunks with stable source IDs"]
+    Chunks --> Embed["CPU MiniLM embeddings"]
+    Incident["Description and bounded log excerpts"] --> Embed
+    Embed --> Rank["Cosine ranking and threshold"]
+    Rank --> Context["Top-k chunks and retrieved source IDs"]
+    Context --> Verify["Check each cited ID against supplied chunks"]
 ```
 
-Retrieval reports document-level Recall@1, Recall@3, Precision@3, MRR and
-negative-case false positives. Analysis reports severity accuracy and macro-F1,
-leading-cause category accuracy on successful responses, overall success rate,
-schema validity, latency, errors, uncertainty
-and citation validity. The mock run checks the pipeline and measures the local
-baseline. It makes no claim about model quality. Both modes run without Groq.
+### LLM request and validation
 
-### Saved 30-case results
+```mermaid
+flowchart LR
+    Request["System instructions + untrusted JSON incident and context"] --> Groq["Strict JSON Schema request"]
+    Groq --> Decode["Validate completion and types with Pydantic"]
+    Decode --> Verify["Filter citation IDs and enforce human review"]
+    Verify --> API["Return public API schema"]
+    Groq --> Retry["Only json_validate_failed: one retry"]
+```
 
-Dataset 1.0.0, `openai/gpt-oss-20b`, 2026-11-23 UTC, provider sampling
-defaults, three RAG chunks, six seconds between requests, and one allowed retry.
+A valid citation ID proves the chunk was supplied. Its relevance to the claim
+and the claim's fit to the incident require separate review. The prompt asks
+the model to abstain when observations are vague, quoted, negated, or
+insufficient. The server requires review for high, critical, or unknown severity,
+an empty hypothesis list, or dropped citation IDs.
+
+## Optional GroqCloud and RAG
+
+Enable GroqCloud explicitly with synthetic inputs. The provider receives the
+description, logs, and any retrieved excerpts. Calls can consume quota.
+
+```bash
+read -rsp 'Groq API key: ' GROQ_API_KEY; printf '\n'
+export GROQ_API_KEY
+ANALYSIS_MODE=groq docker compose --env-file /dev/null up --build --wait
+```
+
+`GROQ_MODEL` defaults to `openai/gpt-oss-20b` and must support strict Structured
+Outputs. For direct Python execution, use `ANALYSIS_MODE=groq python -m uvicorn app.main:app`.
+
+To cache the public model in the Docker volume and run retrieval offline:
+
+```bash
+INSTALL_RAG=true docker compose --env-file /dev/null build api
+INSTALL_RAG=true docker compose --env-file /dev/null run --rm -e HF_HUB_OFFLINE=0 api \
+  python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu", token=False)'
+INSTALL_RAG=true RAG_ENABLED=true docker compose --env-file /dev/null up --wait
+python3 scripts/smoke.py --rag
+```
+
+Set `RAG_TOP_K` to change the default of three chunks. For native CPU RAG setup,
+see the [evaluation guide](evals/README.md).
+
+## Published benchmark
+
+Historical Groq-hosted GPT-OSS 20B A/B run on 30 synthetic cases per arm.
+The [archived reports and checksums](evals/benchmarks/v1/README.md) include
+per-case outcomes, packages, settings, failures, and uncertainty denominators.
 
 | Metric | Without RAG | With RAG |
 | --- | ---: | ---: |
-| API analysis success, all 30 scheduled cases per arm | 26/30 (86.67%) | 26/30 (86.67%) |
-| Severity accuracy, 22 shared successes | 14/22 (63.64%) | 15/22 (68.18%) |
-| Leading-cause category accuracy, 22 shared successes | 18/22 (81.82%) | 20/22 (90.91%) |
-| Severity accuracy, each arm's 26 successes | 17/26 (65.38%) | 16/26 (61.54%) |
-| Leading-cause category accuracy, each arm's 26 successes | 21/26 (80.77%) | 24/26 (92.31%) |
+| Valid analyses delivered | 26/30 | 26/30 |
+| Paired severity accuracy | 14/22 | 15/22 |
+| Paired leading-cause accuracy | 18/22 (81.82%) | 20/22 (90.91%) |
+| Leading-cause accuracy on each arm’s successes | 21/26 | 24/26 |
+| Correct leading cause per scheduled case | 21/30 | 24/30 |
+| Terminal `json_validate_failed` | 4/30 | 4/30 |
+| Review flag plus limitations on successful uncertainty cases | 2/3 | 0/2 |
 
-The separate offline retrieval report measured document Recall@1 of 91.67%,
-Recall@3 of 100%, Precision@3 of 36.11%, and MRR of 0.9722 on 24 cases with
-labeled runbooks. One of six negatives returned a document. These scores
-measure ranking and use no model-generated analyses.
+Offline document retrieval yielded Recall@1 of 91.67%, Recall@3 of 100%, and
+MRR of 0.9722 over 24 positive cases. One of six negatives retrieved a document.
+The production path ranks chunks. The historical run predates the current
+prompt, attribution, and retry changes. A fresh live evaluation is needed to
+measure their effect. The [evaluation guide](evals/README.md) covers offline
+rescoring and reproducible claim-level review.
 
-To recompute the tables from the saved run, use the offline `rescore` command
-below with `live.json` and `retrieval.json`. The original reports are local
-artifacts under `evals/results/`. This single run uses a small, unbalanced
-synthetic dataset. Provider sampling and failures can change scores on rerun.
-The paired comparison excludes cases that failed in either arm, and the
-lexical cause score measures agreement with category labels. See the
-[full audit and uncertainty results](evals/README.md#full-30-case-run-audit).
-
-When you explicitly choose to run the live comparison, export the Groq key as
-shown above and use:
+## Tests and trade-offs
 
 ```bash
-python -m evals live --allow-live --request-interval 3 --retries 2
+HF_HUB_OFFLINE=1 python -m pytest
 ```
 
-Live mode compares paired runs on the same cases and model settings. Pass
-`--case-ids ID [ID ...]` to select distinct dataset cases in the given order.
-A live comparison makes two initial requests per selected case, plus any retries,
-and may incur charges. A full run schedules 60 initial requests. Requests are
-sequential, start at least three seconds apart by default, and pause for at
-least 60 seconds on rate limits or longer if a numeric `Retry-After` header
-requests it. Increase the interval to fit your quota. Timeouts and temporary
-unavailability are retried with bounded exponential backoff.
+Push and pull request CI runs offline tests and checks both Docker endpoints.
+The separate **RAG Docker smoke** workflow is manually triggered. It downloads
+the public embedding model and then exercises retrieval in mock mode. Both
+workflows omit Groq credentials. Version constraints pin the runtime, test, and
+optional CPU RAG dependency graphs for Linux x86_64 and Python 3.14. They pin
+versions rather than wheel hashes or container digests. See the
+[engineering notes](docs/reliability.md) for the audit and verification commands.
 
-Rescore a saved comparison offline with
-`python -m evals rescore --saved-report evals/results/live.json`.
-The paired comparison uses incident IDs that succeeded in both arms.
+The corpus is small, the ranking threshold is fixed, and the leading-cause
+metric uses lexical categories. The service binds locally by default and has
+request and concurrency limits. A public deployment would need authentication,
+per-user quotas, redaction and operational monitoring. Future work includes
+repeating the live benchmark, checking claim support with independent reviewers,
+pinning model and image revisions, and calibrating retrieval on a held-out set.
 
-Each command writes JSON and Markdown under the Git-ignored `evals/results/`
-directory, replacing only the previous reports for the selected mode. Reports
-include run settings and sample counts. Pytest exercises the evaluator with
-doubles and does not invoke GroqCloud or download model weights.
+## Repository map
+
+| Path | Role |
+| --- | --- |
+| `app/` | FastAPI, Pydantic schemas, mock analysis, Groq SDK, NumPy retrieval |
+| `runbooks/` | Synthetic Markdown corpus |
+| `evals/` | Synthetic dataset, scorer, and benchmark artifacts |
+| `tests/` | Offline tests with pytest, HTTPX, and provider doubles |
+| `scripts/smoke.py` | Local HTTP checks for Docker Compose |
+| `.github/workflows/` | Offline CI and manual CPU RAG smoke |

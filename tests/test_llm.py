@@ -15,9 +15,8 @@ def analysis_payload():
     return {
         "severity": "unknown",
         "summary": "Synthetic checkout timed out.",
-        "likely_causes": ["An upstream dependency may be slow."],
+        "hypotheses": [{"claim": "An upstream dependency may be slow.", "source_ids": ["unverified.md"]}],
         "recommended_actions": ["Inspect request traces."],
-        "sources": ["unverified.md"],
         "needs_human_review": True,
         "limitations": ["The scope of user impact is unknown."],
     }
@@ -50,7 +49,13 @@ async def test_groq_analysis_uses_strict_schema_and_validates_result(analysis_pa
     schema = response_format["json_schema"]["schema"]
     assert schema["additionalProperties"] is False
     assert set(schema["required"]) == set(schema["properties"]) == set(analysis_payload)
-    assert result.model_dump() == {**analysis_payload, "sources": []}
+    hypothesis_schema = schema["$defs"]["Hypothesis"]
+    assert hypothesis_schema["additionalProperties"] is False
+    assert set(hypothesis_schema["required"]) == set(hypothesis_schema["properties"])
+    assert result.likely_causes == ["An upstream dependency may be slow."]
+    assert result.sources == result.retrieved_sources == []
+    assert result.hypothesis_evidence[0].source_ids == []
+    assert result.needs_human_review
 
 
 @pytest.mark.parametrize(
@@ -76,3 +81,23 @@ async def test_strict_validation_rejects_bool_coercion(analysis_payload):
             "openai/gpt-oss-20b",
         )
     assert exc.value.failure is Failure.INVALID_RESPONSE
+
+
+@pytest.mark.parametrize(
+    "severity,claim,expected_review",
+    [("unknown", None, True), ("low", None, True), ("high", "A certificate expired.", True),
+     ("critical", "A certificate expired.", True), ("low", "A permission is missing.", False)],
+)
+async def test_review_flags_are_enforced_locally(analysis_payload, severity, claim, expected_review):
+    analysis_payload.update(
+        severity=severity, needs_human_review=False, limitations=[],
+        hypotheses=[{"claim": claim, "source_ids": []}] if claim else [],
+    )
+    result = await analyze_with_groq(
+        IncidentRequest(description="Synthetic report."),
+        mock_client(json.dumps(analysis_payload)), "openai/gpt-oss-20b",
+    )
+    assert result.needs_human_review is expected_review
+    if claim is None:
+        assert not result.likely_causes
+        assert result.limitations

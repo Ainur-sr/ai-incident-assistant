@@ -2,7 +2,7 @@ from asyncio import sleep
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from statistics import mean, median
-from time import perf_counter
+from time import perf_counter, perf_counter_ns
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
@@ -60,27 +60,37 @@ def evaluate_retrieval(cases: list[Case], retrieve: Retrieve, chunk_count: int) 
     }
 
 
-def pace(analyze: Analyze, interval: float) -> Analyze:
-    next_request = 0.0
+class PacedAnalysis:
+    def __init__(self, analyze: Analyze, interval: float) -> None:
+        self.analyze = analyze
+        self.interval = interval
+        self.next_request = 0.0
+        self.wait_ms = 0.0
+        self.provider_ms: float | None = None
 
-    async def call(incident: IncidentRequest, evidence: list[RunbookChunk] | None) -> object:
-        nonlocal next_request
-        delay = next_request - perf_counter()
+    def record_provider_ms(self, elapsed_ms: float) -> None:
+        self.provider_ms = elapsed_ms
+
+    async def __call__(self, incident: IncidentRequest, evidence: list[RunbookChunk] | None) -> object:
+        self.wait_ms = 0.0
+        self.provider_ms = None
+        delay = self.next_request - perf_counter()
         if delay > 0:
+            start = perf_counter_ns()
             await sleep(delay)
-        next_request = perf_counter() + interval
+            self.wait_ms = (perf_counter_ns() - start) / 1e6
+        self.next_request = perf_counter() + self.interval
         try:
-            return await analyze(incident, evidence)
+            return await self.analyze(incident, evidence)
         except AnalysisError as error:
             if error.failure is Failure.RATE_LIMIT:
-                next_request = perf_counter() + max(60.0, interval, error.retry_after or 0.0)
+                self.next_request = perf_counter() + max(60.0, self.interval, error.retry_after or 0.0)
             raise
-
-    return call
 
 
 async def evaluate_case(
-    case: Case, analyze: Analyze, retrieve: Retrieve | None, top_k: int, retries: int
+    case: Case, analyze: Analyze, retrieve: Retrieve | None, top_k: int, retries: int,
+    *, capture_claims: bool = False,
 ) -> dict:
     end_to_end_start = perf_counter()
     evidence = None
@@ -90,6 +100,9 @@ async def evaluate_case(
     attempts = 0
     attempt_errors = []
     attempt_error_details = []
+    analysis_ms = pacing_ms = backoff_ms = 0.0
+    provider_timings = []
+    generation_retried = False
     if retrieve is not None:
         try:
             evidence = retrieve(case.description, case.logs, top_k)
@@ -102,6 +115,7 @@ async def evaluate_case(
             retryable = False
             http_status = None
             provider_error = {}
+            start = perf_counter_ns()
             try:
                 raw = await analyze(case.incident(), evidence)
                 result = IncidentAnalysis.model_validate(raw, strict=True)
@@ -113,6 +127,9 @@ async def evaluate_case(
                 http_status = exc.http_status
                 provider_error = exc.provider_error
                 retryable = exc.failure in RETRYABLE
+                if exc.category is ErrorCategory.PROVIDER_GENERATION:
+                    retryable = not generation_retried
+                    generation_retried = True
                 if exc.category is ErrorCategory.SCHEMA_VALIDATION:
                     schema_valid = False
             except Exception:
@@ -121,6 +138,12 @@ async def evaluate_case(
                 schema_valid = True
                 error = None
                 break
+            finally:
+                wait_ms = analyze.wait_ms if isinstance(analyze, PacedAnalysis) else 0.0
+                pacing_ms += wait_ms
+                if isinstance(analyze, PacedAnalysis) and analyze.provider_ms is not None:
+                    provider_timings.append(analyze.provider_ms)
+                analysis_ms += max(0.0, (perf_counter_ns() - start) / 1e6 - wait_ms)
 
             attempt_errors.append(error)
             detail = {"attempt": attempts, "category": error, "http_status": http_status}
@@ -129,8 +152,10 @@ async def evaluate_case(
             attempt_error_details.append(detail)
             if not retryable:
                 break
-            if attempt < retries and error != ErrorCategory.HTTP_429:
+            if attempt < retries and error not in {ErrorCategory.HTTP_429, ErrorCategory.PROVIDER_GENERATION}:
+                start = perf_counter_ns()
                 await sleep(2 ** attempt)
+                backoff_ms += (perf_counter_ns() - start) / 1e6
 
     predicted_cause, cause_matches = classify_cause(result.likely_causes) if result else (None, None)
     uncertainty_expected = "unknown" in (case.expected_severity, case.expected_cause)
@@ -145,6 +170,12 @@ async def evaluate_case(
         "error": error,
         "attempts": attempts,
         "latency_ms": (perf_counter() - end_to_end_start) * 1000,
+        "analysis_latency_ms": analysis_ms if attempts else None,
+        "provider_latency_ms": sum(provider_timings) if provider_timings else None,
+        "pacing_delay_ms": pacing_ms,
+        "retry_backoff_ms": backoff_ms,
+        **({"hypothesis_evidence": [item.model_dump() for item in result.hypothesis_evidence]
+            if result else []} if capture_claims else {}),
         "attempt_errors": attempt_errors,
         "attempt_error_details": attempt_error_details,
         "uncertainty_expected": uncertainty_expected,
@@ -194,11 +225,23 @@ def analysis_report(rows: list[dict]) -> dict:
         cited_documents = {source.split("#", 1)[0] for source in sources}
         coverage.append(len(expected & cited_documents) / len(expected))
     latency = [row["latency_ms"] for row in rows]
+    timing = {}
+    for key in ("analysis_latency_ms", "provider_latency_ms", "pacing_delay_ms", "retry_backoff_ms"):
+        values = [row[key] for row in rows if row.get(key) is not None]
+        if values:
+            timing[f"{key.removesuffix('_ms')}_mean_ms"] = mean(values)
     return {
         "metrics": {
+            **timing,
             "sample_count": count,
             "success_count": len(successes),
             "success_rate": ratio(len(successes), count),
+            "severity_correct_per_scheduled_case": ratio(sum(
+                row["expected_severity"] == row["predicted_severity"] for row in successes
+            ), count),
+            "cause_correct_per_scheduled_case": ratio(sum(
+                row["expected_cause"] == row["predicted_cause"] for row in successes
+            ), count),
             "severity_incorrect_count": sum(
                 row["expected_severity"] != row["predicted_severity"] for row in successes
             ),
@@ -281,13 +324,16 @@ async def evaluate_analysis(
 
 
 async def compare_rag(
-    cases: list[Case], analyze: Analyze, retrieve: Retrieve, top_k: int, retries: int
+    cases: list[Case], analyze: Analyze, retrieve: Retrieve, top_k: int, retries: int,
+    *, capture_claims: bool = False,
 ) -> dict:
     arms = {"without_rag": [], "with_rag": []}
     for i, case in enumerate(cases):
         treatments = [("without_rag", None), ("with_rag", retrieve)]
         # Alternate order to reduce the effect of time and provider conditions.
         for name, lookup in treatments[::(-1 if i % 2 else 1)]:
-            arms[name].append(await evaluate_case(case, analyze, lookup, top_k, retries))
+            arms[name].append(await evaluate_case(
+                case, analyze, lookup, top_k, retries, capture_claims=capture_claims
+            ))
 
     return comparison_report(arms["without_rag"], arms["with_rag"])

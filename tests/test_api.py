@@ -37,8 +37,8 @@ async def test_timeout_analysis_is_deterministic(client, payload):
     repeated_response = await client.post("/analyze", json=payload)
     assert result == repeated_response.json()
     assert result["severity"] == "unknown"
-    assert result["summary"] == "The incident text contains a timeout signal."
-    assert result["likely_causes"]
+    assert result["summary"] == "The incident text mentions a timeout."
+    assert result["likely_causes"] == []
     assert result["recommended_actions"]
     assert result["sources"] == []
     assert result["needs_human_review"] is True
@@ -63,6 +63,61 @@ async def test_accepts_field_length_limits(client):
     )
 
     assert response.status_code == 200
+
+
+async def test_misleading_sample_error_labels_do_not_create_a_diagnosis(client):
+    response = await client.post("/analyze", json={
+        "description": "A docs preview shows CPU high, OOM, network timeout and HTTP 503. "
+                       "Monitoring is normal and every request succeeds.",
+        "logs": "test fixture displayed sample labels only",
+    })
+    assert response.status_code == 200
+    assert response.json()["likely_causes"] == []
+    assert response.json()["needs_human_review"] is True
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_rejects_oversized_body_before_parsing(client, streaming):
+    async def chunks():
+        yield b"x" * (144 * 1024)
+        yield b"y" * (145 * 1024)
+
+    response = await client.post("/analyze", content=chunks() if streaming else b"x" * (289 * 1024))
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request body is too large."}
+
+
+async def test_saturated_analysis_rejects_work_and_keeps_health_available(client):
+    import asyncio
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+    count = 0
+
+    async def held_body():
+        nonlocal count
+        count += 1
+        if count == 4:
+            started.set()
+        await release.wait()
+        yield b'{"description":"Synthetic"}'
+
+    async with asyncio.TaskGroup() as group:
+        inflight = [group.create_task(client.post(
+            "/analyze", content=held_body(), headers={"Content-Type": "application/json"}
+        )) for _ in range(4)]
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert (await client.post("/analyze", json={"description": "Synthetic"})).status_code == 503
+        assert (await client.get("/health")).status_code == 200
+        release.set()
+    assert all(task.result().status_code == 200 for task in inflight)
+
+
+async def test_validation_does_not_echo_unexpected_field_names(client):
+    marker = "synthetic-sensitive-field-name"
+    response = await client.post("/analyze", json={"description": "Synthetic", marker: True})
+    assert response.status_code == 422
+    assert marker not in response.text
 
 
 @pytest.mark.parametrize(

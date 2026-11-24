@@ -153,7 +153,7 @@ async def test_rate_limit_paces_subsequent_calls_even_without_retry(monkeypatch)
     monkeypatch.setattr(runner, "sleep", pause)
     times = iter([10, 10, 11, 12, 91])
     monkeypatch.setattr(runner, "perf_counter", lambda: next(times))
-    analyze = runner.pace(AsyncMock(side_effect=[
+    analyze = runner.PacedAnalysis(AsyncMock(side_effect=[
         AnalysisError(Failure.RATE_LIMIT, retry_after=80), valid_analysis(),
     ]), 3)
     dataset, _ = cli.load_dataset()
@@ -178,7 +178,7 @@ def test_mock_cli_generates_reports_without_provider_or_model(monkeypatch, tmp_p
     monkeypatch.setattr(cli.llm, "create_groq_client", lambda *_: pytest.fail("Created SDK client"))
     monkeypatch.setattr(cli.retrieval, "retrieve", lambda *_: pytest.fail("Loaded embeddings"))
     writer = cli.write_reports
-    monkeypatch.setattr(cli, "write_reports", lambda report: writer(report, tmp_path))
+    monkeypatch.setattr(cli, "write_reports", lambda report, directory: writer(report, tmp_path))
 
     cli.main(["mock"])
 
@@ -205,8 +205,9 @@ def test_five_case_live_cli_schedules_ten_calls_with_a_mocked_provider(monkeypat
         assert api_key == "test-placeholder"
         yield client
 
-    async def analyze(incident, sdk_client, model, evidence):
+    async def analyze(incident, sdk_client, model, evidence, *, record_provider_ms):
         calls.append((incident, sdk_client, model, evidence))
+        record_provider_ms(0.25)
         return valid_analysis()
 
     monkeypatch.setattr(cli.config, "groq_api_key", lambda: "test-placeholder")
@@ -214,12 +215,12 @@ def test_five_case_live_cli_schedules_ten_calls_with_a_mocked_provider(monkeypat
     monkeypatch.setattr(cli.llm, "create_groq_client", create_client)
     monkeypatch.setattr(cli.llm, "analyze_with_groq", analyze)
     monkeypatch.setattr(cli.retrieval, "retrieve", lambda *_: [])
-    monkeypatch.setattr(cli, "pace", lambda analyze, _: analyze)
+    monkeypatch.setattr(runner, "sleep", AsyncMock())
     writer = cli.write_reports
-    monkeypatch.setattr(cli, "write_reports", lambda report: writer(report, tmp_path))
+    monkeypatch.setattr(cli, "write_reports", lambda report, directory: writer(report, tmp_path))
 
     cli.main(["live", "--allow-live", "--case-ids", *PILOT_IDS,
-              "--request-interval", "3", "--retries", "0"])
+              "--request-interval", "3", "--retries", "0", "--output-dir", str(tmp_path)])
 
     report = json.loads((tmp_path / "live.json").read_text())
     assert report["sample_count"] == 5
@@ -232,6 +233,7 @@ def test_five_case_live_cli_schedules_ten_calls_with_a_mocked_provider(monkeypat
     for arm in ["without_rag", "with_rag"]:
         assert [case["id"] for case in report["results"][arm]["cases"]] == PILOT_IDS
         assert report["results"][arm]["metrics"]["analysis_attempts"] == 5
+        assert report["results"][arm]["metrics"]["provider_latency_mean_ms"] == 0.25
 
 
 @pytest.mark.parametrize("ids", [["INC-001", "INC-001"], ["INC-999"]])
@@ -300,7 +302,7 @@ async def test_rescore_legacy_reports_uses_intersection_and_preserves_failures(m
     monkeypatch.setattr(cli.llm, "create_groq_client", lambda *_: pytest.fail("Created client"))
     monkeypatch.setattr(cli.retrieval, "retrieve", lambda *_: pytest.fail("Ran retrieval"))
 
-    cli.main(["rescore", "--saved-report", str(source)])
+    cli.main(["rescore", "--saved-report", str(source), "--output-dir", str(tmp_path)])
 
     assert source.read_text() == original
     report = json.loads((tmp_path / "live-rescored.json").read_text())
@@ -486,11 +488,25 @@ async def test_http_400_keeps_only_allowlisted_provider_fields(wrapped, groq_cli
 
     attempt, = report["cases"][0]["attempt_error_details"]
     assert attempt == {
-        "attempt": 1, "category": "http_4xx", "http_status": 400,
+        "attempt": 1, "category": "provider_generation", "http_status": 400,
         "provider_error": {"type": fields["type"], "code": fields["code"], "param": fields["param"]},
     }
-    assert report["metrics"]["errors_by_type"] == {"http_4xx": 1}
+    assert report["metrics"]["errors_by_type"] == {"provider_generation": 1}
     assert secret not in json.dumps(report)
+
+
+async def test_evaluation_retries_generation_only_once():
+    dataset, _ = cli.load_dataset()
+    failure = AnalysisError(Failure.INVALID_RESPONSE, category=runner.ErrorCategory.PROVIDER_GENERATION)
+    analyze = AsyncMock(side_effect=[failure, failure, valid_analysis()])
+
+    report = await runner.evaluate_analysis(dataset.cases[:1], analyze, retries=5)
+
+    row, = report["cases"]
+    assert row["attempts"] == analyze.await_count == 2
+    assert row["attempt_errors"] == ["provider_generation", "provider_generation"]
+    assert row["analysis_latency_ms"] >= 0
+    assert row["retry_backoff_ms"] == row["pacing_delay_ms"] == 0
 
 
 @pytest.mark.parametrize("body", [

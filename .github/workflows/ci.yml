@@ -26,15 +26,16 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-dev.txt
+            requirements-lock.txt
       - name: Install test dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -c requirements-lock.txt -r requirements-dev.txt
       - name: Run offline tests
         run: python -m pytest
       - name: Build and check the Docker service
         run: |
           docker compose config --quiet
           docker compose up --build --wait --wait-timeout 60
-          curl --fail --silent --show-error http://127.0.0.1:8000/health
+          python scripts/smoke.py
       - name: Stop the Docker service
         if: always()
         run: docker compose down

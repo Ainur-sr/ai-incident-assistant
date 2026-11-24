@@ -1,6 +1,8 @@
 **
 !requirements.txt
 !requirements-rag.txt
+!requirements-lock.txt
+!requirements-rag-lock.txt
 !app/
 app/**
 !app/*.py
